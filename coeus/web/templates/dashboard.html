@@ -6,8 +6,10 @@
   <div class="card"><div class="muted">Known people</div><div class="stat">{{ people }}</div></div>
   <div class="card"><div class="muted">Archive queue</div><div class="stat">{{ (job_counts.get('pending',0) + job_counts.get('merged',0)) }}</div>
     <div class="muted">{{ job_counts.get('done',0) }} done · {{ job_counts.get('failed',0) }} failed</div></div>
-  <div class="card"><div class="muted">YouTube uploads today</div><div class="stat">{{ uploads_today }} / {{ upload_cap }}</div>
-    <div class="muted">{% if not yt_connected %}<a href="/settings#youtube">Not connected</a>{% elif quota_blocked %}Quota exhausted — resumes after reset{% else %}Connected{% endif %}</div></div>
+  <div class="card"><div class="muted">YouTube accounts</div>
+    {% for a in accounts %}{% set q = quotas[a.id] %}<div>{{ a.name }}: <b>{{ q[1] }}/{{ q[2] }}</b> today
+      {% if not a.connected %}<span class="badge failed">not connected</span>{% elif q[0] %}<span class="badge failed">quota</span>{% endif %}</div>
+    {% else %}<a href="/youtube/new">Add a YouTube account</a>{% endfor %}</div>
   {% if disk %}<div class="card"><div class="muted">Free space on /data</div><div class="stat">{{ disk.free|filesize }}</div><div class="muted">of {{ disk.total|filesize }}</div></div>{% endif %}
 </div>
 

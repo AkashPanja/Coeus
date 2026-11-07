@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% block title %}Connect {{ acct.name }}{% endblock %}
+{% block content %}
+<h1>Connect “{{ acct.name }}”</h1>
+<form method="post" action="/youtube/{{ acct.id }}/connect" class="card">{% include "_csrf.html" %}
+<input type="hidden" name="next" value="{{ next }}">
+<p><b>1.</b> <a class="btn" href="{{ auth_url }}" target="_blank" rel="noopener">Open Google sign-in</a>, then choose the Google account that owns the channel and allow all permissions.</p>
+<p class="muted"><b>2.</b> Google then sends your browser to an address starting with <code>http://localhost:1/?…code=…</code>. That page will not load; this is expected. Copy the whole address from the address bar.</p>
+<label><b>3.</b> Paste that address here</label>
+<input type="text" name="redirect_url" required placeholder="http://localhost:1/?state=…&code=…&scope=…">
+<p><button>Connect and test</button> <a href="/youtube">Later</a></p>
+</form>
+{% endblock %}

@@ -76,6 +76,19 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
   newer segment exists.
 * FR-R4: The user can enable or disable archiving for each camera folder and
   give each one a YouTube title template, a privacy setting and a playlist.
+* FR-R5: **Choose the library folder in the UI.** docker-compose exposes one host
+  path to the container (for example `/volume1/surveillance`, or all of `/volume1`).
+  The UI browses that path, suggests folders that contain camera folders, and lets
+  the user select the main folder. Coeus then works out the rest:
+  * Selecting the share uses it.
+  * Selecting a single camera folder uses its parent.
+  * Selecting a folder above the share (such as `/volume1`) uses the one folder
+    inside it that holds cameras, or asks which one if there are several.
+  * Paths outside the mount are refused.
+* FR-R6: **Every camera added for archiving must say which YouTube account it
+  uploads to.** If no account exists yet, Coeus sends the user to create one, then
+  returns them to the camera they were adding. The Recordings page offers an
+  "Add & archive daily" control per folder that asks for the account.
 
 ### 3.3 Daily merge (P1)
 
@@ -102,6 +115,13 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
 
 ### 3.4 YouTube upload (P1)
 
+* FR-Y0: **Multiple YouTube accounts.** Any number of accounts (channels) can be
+  added, each with its own name, OAuth client and daily upload limit. A new
+  account can reuse an existing account's OAuth client, which means the same
+  Google project and therefore a shared quota. Each account has a **Test** button
+  that checks the token, the channel and the upload permission, and shows today's
+  quota use. The camera form has a Test button for the selected account. Removing
+  an account turns off archiving for the cameras that used it.
 * FR-Y1: Connect a YouTube channel with Google OAuth 2.0 using a
   "Desktop app" client. Google does not accept LAN addresses such as
   `https://192.168.0.111` as redirect URIs. Instead, Coeus shows the consent
@@ -117,7 +137,8 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
 * FR-Y4: Uploads are **private by default**. YouTube also locks uploads from
   unverified API projects to private, so the README explains how to apply for
   verification if the user wants unlisted or public videos.
-* FR-Y5: Handle the API quota. The default quota is 10,000 units a day and each
+* FR-Y5: Handle the API quota, tracked **per Google Cloud project** (OAuth client
+  ID). One exhausted project never blocks cameras that upload through another. The default quota is 10,000 units a day and each
   upload costs about 1,600, so only about 6 uploads fit in a day. Coeus keeps a
   priority queue, stops when it gets `quotaExceeded`, and continues after the
   quota resets at midnight Pacific time. The dashboard shows the backlog.
@@ -149,6 +170,8 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
   keeps CPU use low.
 * FR-C3: Each camera can be linked to its recordings folder, so archiving and
   live watching share one camera list.
+* FR-C3a: **Test stream** buttons for the main and detection URLs. Each one grabs
+  a frame and shows the resolution, frame rate and a preview.
 * FR-C4: Show the latest snapshot and the connection status (online,
   reconnecting, or an error) for each camera. Reconnect automatically with
   backoff.

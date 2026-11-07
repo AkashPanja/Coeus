@@ -51,8 +51,36 @@ class Camera(Base):
         String(256), default="{camera} — {date} (part {part}/{parts})")
     yt_privacy: Mapped[str] = mapped_column(String(16), default="private")
     yt_playlist_id: Mapped[str] = mapped_column(String(64), default="")
+    yt_account_id: Mapped[int | None] = mapped_column(
+        ForeignKey("youtube_accounts.id", ondelete="SET NULL"), nullable=True)
 
     zones: Mapped[list[Zone]] = relationship(back_populates="camera", cascade="all, delete-orphan")
+
+
+class YouTubeAccount(Base):
+    """One connected YouTube channel. Quota is shared by accounts using the same OAuth client
+    (same Google Cloud project), so quota bookkeeping is keyed by client_id."""
+    __tablename__ = "youtube_accounts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    client_config: Mapped[dict] = mapped_column(JSON, default=dict)
+    credentials: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    channel_title: Mapped[str] = mapped_column(String(256), default="")
+    channel_id: Mapped[str] = mapped_column(String(64), default="")
+    daily_upload_limit: Mapped[int] = mapped_column(Integer, default=6)
+    last_test_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    last_test_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_test_detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    @property
+    def client_id(self) -> str:
+        cfg = self.client_config or {}
+        return (cfg.get("installed") or cfg.get("web") or {}).get("client_id", "")
+
+    @property
+    def connected(self) -> bool:
+        return bool(self.credentials)
 
 
 class Zone(Base):

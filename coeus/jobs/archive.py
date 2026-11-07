@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from coeus import settings_store as ss
 from coeus.config import Settings
 from coeus.db import session_scope
-from coeus.models import ArchiveJob, Camera, Event
+from coeus.models import ArchiveJob, Camera, Event, YouTubeAccount
+from coeus.recordings.library import library_root
 from coeus.recordings import merge as mg
 from coeus.recordings.synology import scan_segments
 from coeus.youtube import uploader as yt
@@ -22,6 +23,10 @@ from coeus.youtube import uploader as yt
 log = logging.getLogger(__name__)
 PACIFIC = ZoneInfo("America/Los_Angeles")  # YouTube quota resets at midnight Pacific
 _worker_lock = threading.Lock()
+
+
+def recordings_root(db: Session, settings: Settings) -> Path:
+    return library_root(settings.recordings_dir, str(ss.get(db, "library.root") or ""))
 
 
 def plan_day(db: Session, settings: Settings, camera_folder: str, day: date,
@@ -37,7 +42,7 @@ def plan_day(db: Session, settings: Settings, camera_folder: str, day: date,
                 raise ValueError(f"part {j.part} is {j.status}; cannot re-plan")
             db.delete(j)
         db.flush()
-    segs = scan_segments(settings.recordings_dir, camera_folder, day,
+    segs = scan_segments(recordings_root(db, settings), camera_folder, day,
                          settle_seconds=float(ss.get(db, "archive.settle_minutes")) * 60)
     if not segs:
         return []
@@ -84,28 +89,55 @@ def recover_interrupted() -> None:
             job.status = "pending" if job.status == "merging" else "merged"
 
 
-def _quota_state(db: Session) -> tuple[bool, int, int]:
-    """(blocked, uploads_today, limit)"""
-    today = datetime.now(PACIFIC).date().isoformat()
-    blocked_until = ss.get(db, "youtube.quota_blocked_until")
-    blocked = bool(blocked_until and datetime.fromisoformat(blocked_until) > datetime.now(timezone.utc))
-    counter = ss.get(db, "youtube.uploads_today") or {}
-    count = counter.get("count", 0) if counter.get("date") == today else 0
-    return blocked, count, int(ss.get(db, "youtube.daily_upload_limit") or 6)
+# --- Quota (per Google Cloud project = per OAuth client id) ----------------------------
+
+def _today_pt() -> str:
+    return datetime.now(PACIFIC).date().isoformat()
 
 
-def _bump_upload_count(db: Session) -> None:
-    today = datetime.now(PACIFIC).date().isoformat()
-    counter = ss.get(db, "youtube.uploads_today") or {}
-    count = counter.get("count", 0) if counter.get("date") == today else 0
-    ss.set_(db, "youtube.uploads_today", {"date": today, "count": count + 1})
+def quota_state(db: Session, account: YouTubeAccount) -> tuple[bool, int, int]:
+    """(blocked, uploads_today, daily_limit) for the project the account belongs to."""
+    entry = (ss.get(db, "youtube.quota") or {}).get(account.client_id, {})
+    until = entry.get("blocked_until")
+    blocked = bool(until and datetime.fromisoformat(until) > datetime.now(timezone.utc))
+    count = entry.get("count", 0) if entry.get("date") == _today_pt() else 0
+    return blocked, count, max(1, int(account.daily_upload_limit or 6))
 
 
-def _block_until_quota_reset(db: Session) -> None:
-    now_pt = datetime.now(PACIFIC)
-    reset = datetime.combine(now_pt.date() + timedelta(days=1), datetime.min.time(),
-                             tzinfo=PACIFIC) + timedelta(minutes=5)
-    ss.set_(db, "youtube.quota_blocked_until", reset.astimezone(timezone.utc).isoformat())
+def _update_quota(db: Session, client_id: str, bump: bool = False, block: bool = False) -> None:
+    quota = dict(ss.get(db, "youtube.quota") or {})
+    entry = dict(quota.get(client_id, {}))
+    if entry.get("date") != _today_pt():
+        entry = {"date": _today_pt(), "count": 0, "blocked_until": entry.get("blocked_until")}
+    if bump:
+        entry["count"] = entry.get("count", 0) + 1
+    if block:
+        now_pt = datetime.now(PACIFIC)
+        reset = datetime.combine(now_pt.date() + timedelta(days=1), datetime.min.time(),
+                                 tzinfo=PACIFIC) + timedelta(minutes=5)
+        entry["blocked_until"] = reset.astimezone(timezone.utc).isoformat()
+    quota[client_id] = entry
+    ss.set_(db, "youtube.quota", quota)
+
+
+def account_unavailable(db: Session, account: YouTubeAccount | None) -> str:
+    """Why uploads for this account can't happen now ('' if they can)."""
+    if account is None:
+        return "no YouTube account selected for this camera"
+    if not account.connected:
+        return f"YouTube account “{account.name}” is not connected"
+    blocked, count, cap = quota_state(db, account)
+    if blocked:
+        return f"waiting for YouTube quota reset ({account.name})"
+    if count >= cap:
+        return f"daily upload limit reached for “{account.name}” ({count}/{cap})"
+    return ""
+
+
+def _job_account(db: Session, job: ArchiveJob) -> tuple[Camera | None, YouTubeAccount | None]:
+    cam = db.scalar(select(Camera).where(Camera.recording_folder == job.camera_folder))
+    acct = db.get(YouTubeAccount, cam.yt_account_id) if cam and cam.yt_account_id else None
+    return cam, acct
 
 
 def _set(job_id: int, **fields) -> None:
@@ -123,13 +155,14 @@ def merge_job(settings: Settings, job_id: int) -> None:
         segs, _ = job_segments(job)
         out = (settings.work_dir / job.camera_folder.replace("/", "_") /
                f"{job.day}-part{job.part}.mp4")
-        job.status, job.attempts = "merging", job.attempts + 1
+        job.status, job.attempts, job.error = "merging", job.attempts + 1, ""
     try:
         good, bad = mg.validate_segments(segs, settings.ffprobe)
         if not good:
             raise RuntimeError("no playable segments")
         mg.merge(good, out, settings.ffmpeg)
-        note = f"skipped {len(bad)} unreadable segment(s): {', '.join(Path(b).name for b in bad)}" if bad else ""
+        note = (f"skipped {len(bad)} unreadable segment(s): "
+                f"{', '.join(Path(b).name for b in bad)}") if bad else ""
         _set(job_id, status="merged", output_path=str(out), error=note)
     except Exception as err:  # noqa: BLE001
         log.exception("merge failed for job %s", job_id)
@@ -137,32 +170,37 @@ def merge_job(settings: Settings, job_id: int) -> None:
 
 
 def upload_job(settings: Settings, job_id: int) -> bool:
-    """Returns False when uploads must stop for now (quota)."""
+    """Upload one merged part. Returns False when its account can't upload right now."""
     with session_scope() as db:
         job = db.get(ArchiveJob, job_id)
         assert job is not None
-        cam = db.scalar(select(Camera).where(Camera.recording_folder == job.camera_folder))
-        creds = ss.get(db, "youtube.credentials")
+        cam, acct = _job_account(db, job)
+        why = account_unavailable(db, acct)
+        if why:
+            job.error = why
+            return False
+        account_id, client_id, creds = acct.id, acct.client_id, acct.credentials
         category = ss.get(db, "youtube.category_id") or "22"
         keep = ss.get(db, "archive.keep_merged")
         segs, gaps = job_segments(job)
         camera_name = cam.name if cam else job.camera_folder
-        title_tpl = cam.yt_title_template if cam else "{camera} — {date} (part {part}/{parts})"
-        privacy = cam.yt_privacy if cam else "private"
-        playlist = cam.yt_playlist_id if cam else ""
         start = segs[0].start_dt if segs else None
         end = (segs[-1].start_dt + timedelta(seconds=segs[-1].duration)) if segs else None
-        title = yt.render_title(title_tpl, camera=camera_name, date=job.day, part=job.part,
-                                parts=job.parts, start=start.strftime("%H:%M") if start else "",
+        title = yt.render_title(cam.yt_title_template, camera=camera_name, date=job.day,
+                                part=job.part, parts=job.parts,
+                                start=start.strftime("%H:%M") if start else "",
                                 end=end.strftime("%H:%M") if end else "")
         desc = yt.build_description(camera_name, job.day, job.part, job.parts,
                                     mg.chapters(segs), gaps, mg.fmt_ts)
+        privacy, playlist = cam.yt_privacy, cam.yt_playlist_id
         resume_uri, output = job.upload_session_uri, Path(job.output_path)
-        job.status = "uploading"
+        job.status, job.error = "uploading", ""
 
     def save_creds(info: dict) -> None:
         with session_scope() as db2:
-            ss.set_(db2, "youtube.credentials", info)
+            a = db2.get(YouTubeAccount, account_id)
+            if a:
+                a.credentials = info
 
     try:
         if not output.exists():
@@ -175,9 +213,9 @@ def upload_job(settings: Settings, job_id: int) -> bool:
                 yt.add_to_playlist(service, playlist, video_id)
             except Exception as err:  # noqa: BLE001
                 log.warning("playlist insert failed: %s", err)
-        _set(job_id, status="done", video_id=video_id, upload_session_uri="")
+        _set(job_id, status="done", video_id=video_id, upload_session_uri="", error="")
         with session_scope() as db:
-            _bump_upload_count(db)
+            _update_quota(db, client_id, bump=True)
         if keep == "delete":
             output.unlink(missing_ok=True)
         return True
@@ -185,7 +223,7 @@ def upload_job(settings: Settings, job_id: int) -> bool:
         log.warning("YouTube quota exceeded: %s", err)
         _set(job_id, status="merged", error="waiting for YouTube quota reset")
         with session_scope() as db:
-            _block_until_quota_reset(db)
+            _update_quota(db, client_id, block=True)
         return False
     except yt.NotConnected as err:
         _set(job_id, status="merged", error=str(err))
@@ -196,43 +234,48 @@ def upload_job(settings: Settings, job_id: int) -> bool:
         return True
 
 
+def _next_job(db: Session, status: str) -> int | None:
+    """Oldest job in `status` whose camera's YouTube account can upload now.
+
+    Jobs for unavailable accounts are skipped (and get a note), so one exhausted account
+    never blocks the others, and nothing is merged that can't be uploaded soon.
+    """
+    for job in db.scalars(select(ArchiveJob).where(ArchiveJob.status == status)
+                          .order_by(ArchiveJob.day, ArchiveJob.part)):
+        _, acct = _job_account(db, job)
+        why = account_unavailable(db, acct)
+        if not why:
+            return job.id
+        job.error = why
+    return None
+
+
 def run_worker(settings: Settings) -> None:
-    """Process pending merges and uploads one at a time (oldest day first)."""
+    """Merge and upload one part at a time (oldest day first)."""
     if not _worker_lock.acquire(blocking=False):
         return
     try:
         while True:
+            _try_uploads(settings)  # finish already-merged parts first
             with session_scope() as db:
-                job = db.scalar(select(ArchiveJob).where(ArchiveJob.status == "pending")
-                                .order_by(ArchiveJob.day, ArchiveJob.part).limit(1))
-                job_id = job.id if job else None
+                job_id = _next_job(db, "pending")
             if job_id is None:
                 break
             merge_job(settings, job_id)
-            # Upload right away so merged files don't pile up on disk.
-            if not _try_uploads(settings, limit=1):
-                break
-        _try_uploads(settings)
+            with session_scope() as db:
+                merged = db.get(ArchiveJob, job_id).status == "merged"
+            if merged:
+                upload_job(settings, job_id)  # right away, so merged files don't pile up
     finally:
         _worker_lock.release()
 
 
-def _try_uploads(settings: Settings, limit: int | None = None) -> bool:
-    done = 0
-    while limit is None or done < limit:
+def _try_uploads(settings: Settings) -> None:
+    while True:
         with session_scope() as db:
-            blocked, count, cap = _quota_state(db)
-            if blocked or count >= cap or not ss.get(db, "youtube.credentials"):
-                return False
-            job = db.scalar(select(ArchiveJob).where(ArchiveJob.status == "merged")
-                            .order_by(ArchiveJob.day, ArchiveJob.part).limit(1))
-            job_id = job.id if job else None
-        if job_id is None:
-            return True
-        if not upload_job(settings, job_id):
-            return False
-        done += 1
-    return True
+            job_id = _next_job(db, "merged")
+        if job_id is None or not upload_job(settings, job_id):
+            return
 
 
 def cleanup_events(settings: Settings) -> int:

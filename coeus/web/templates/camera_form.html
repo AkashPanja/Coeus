@@ -26,6 +26,10 @@
 </div>
 <p><button type="button" class="secondary" onclick="probe()">Query camera</button> <span id="probe_out" class="muted"></span></p>
 </details>
+<p><button type="button" class="secondary" onclick="testStream('rtsp_url')">Test main stream</button>
+<button type="button" class="secondary" onclick="testStream('sub_rtsp_url')">Test detection stream</button>
+<span id="stream_out" class="muted"></span></p>
+<img id="stream_preview" alt="" style="display:none;border-radius:6px;max-width:320px">
 <div class="row">
   <div><label><input type="checkbox" name="monitor_enabled" {{ 'checked' if cam.monitor_enabled }}> Monitor this camera live</label></div>
   <div><label>Detection FPS</label><input type="number" step="0.5" min="0.5" max="15" name="detect_fps" value="{{ cam.detect_fps }}"></div>
@@ -38,6 +42,19 @@
 <h2>YouTube archive</h2>
 <div class="row">
   <div><label><input type="checkbox" name="archive_enabled" {{ 'checked' if cam.archive_enabled }}> Merge and upload daily</label></div>
+  <div><label>Upload to YouTube account</label>
+    {% if accounts %}
+    <select name="yt_account_id" id="yt_account_id">
+      <option value="">— choose —</option>
+      {% for a in accounts %}<option value="{{ a.id }}" {{ 'selected' if a.id == cam.yt_account_id }}>{{ a.name }}{{ ' · ' ~ a.channel_title if a.channel_title }}{{ ' (not connected)' if not a.connected }}</option>{% endfor %}
+    </select>
+    <p style="margin:6px 0 0"><button type="button" class="small secondary" onclick="testAccount()">Test account</button>
+      <a href="/youtube/new?next={{ (request.url.path ~ ('?' ~ request.url.query if request.url.query else ''))|urlencode }}">add another</a>
+      <span id="acct_out" class="muted"></span></p>
+    {% else %}
+    <div class="flash error" style="margin:0">No YouTube account yet. <a href="/youtube/new?next={{ (request.url.path ~ ('?' ~ request.url.query if request.url.query else ''))|urlencode }}">Add one</a> (you'll come back here).</div>
+    {% endif %}
+  </div>
   <div><label>Privacy</label><select name="yt_privacy">{% for p in ['private','unlisted','public'] %}<option {{ 'selected' if cam.yt_privacy == p }}>{{ p }}</option>{% endfor %}</select></div>
   <div><label>Playlist ID <span class="hint">optional</span></label><input type="text" name="yt_playlist_id" value="{{ cam.yt_playlist_id or '' }}"></div>
 </div>
@@ -46,12 +63,31 @@
 <p><button>Save</button> <a href="/cameras">Cancel</a></p>
 </form>
 <script>
+const CSRF=document.querySelector('meta[name=csrf-token]').content;
+async function testStream(field){
+  const out=document.getElementById('stream_out'), img=document.getElementById('stream_preview');
+  const url=document.getElementById(field).value.trim();
+  if(!url){out.textContent='Enter a URL first';return;}
+  out.textContent='Connecting… (up to ~30 s)'; img.style.display='none';
+  const fd=new FormData(); fd.append('url',url);
+  const j=await (await fetch('/cameras/test-stream',{method:'POST',body:fd,headers:{'X-CSRF-Token':CSRF}})).json();
+  if(!j.ok){out.textContent='✗ '+j.error;return;}
+  out.textContent='✓ '+j.width+'×'+j.height+(j.fps?' @ '+j.fps+' fps':'');
+  img.src=j.preview; img.style.display='block';
+}
+async function testAccount(){
+  const out=document.getElementById('acct_out'), id=document.getElementById('yt_account_id').value;
+  if(!id){out.textContent='Choose an account first';return;}
+  out.textContent='Testing…';
+  const j=await (await fetch('/youtube/'+id+'/test',{method:'POST',headers:{'X-CSRF-Token':CSRF,'Accept':'application/json'}})).json();
+  out.textContent=(j.ok?'✓ ':'✗ ')+j.detail+' ('+j.quota+')';
+}
 async function probe(){
   const out=document.getElementById('probe_out'); out.textContent='Querying…';
   const fd=new FormData();
   fd.append('host',onvif_host.value); fd.append('port',onvif_port.value||80);
   fd.append('username',onvif_user.value); fd.append('password',onvif_password.value);
-  const r=await fetch('/cameras/onvif-probe',{method:'POST',body:fd,headers:{'X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content}});
+  const r=await fetch('/cameras/onvif-probe',{method:'POST',body:fd,headers:{'X-CSRF-Token':CSRF}});
   const j=await r.json();
   if(!j.ok){out.textContent='Error: '+j.error;return;}
   if(!j.profiles.length){out.textContent='No profiles found';return;}

@@ -196,3 +196,37 @@ def add_to_playlist(service, playlist_id: str, video_id: str) -> None:
     service.playlistItems().insert(part="snippet", body={"snippet": {
         "playlistId": playlist_id,
         "resourceId": {"kind": "youtube#video", "videoId": video_id}}}).execute()
+
+
+def test_credentials(credentials_info: dict | None,
+                     on_refresh: Callable[[dict], None] | None = None) -> dict:
+    """Check the stored token works and can see a channel.
+
+    Returns {"ok", "detail", "channel_title", "channel_id"}. Costs 1 quota unit.
+    """
+    try:
+        service = build_service(credentials_info, on_refresh)
+        resp = service.channels().list(part="snippet,status", mine=True).execute()
+    except NotConnected as err:
+        return {"ok": False, "detail": str(err), "channel_title": "", "channel_id": ""}
+    except Exception as err:  # noqa: BLE001
+        msg = str(err)
+        if "invalid_grant" in msg:
+            msg = ("Google rejected the saved token (revoked, or expired because the OAuth "
+                   "consent screen is in 'Testing' mode: tokens then last 7 days). Reconnect.")
+        return {"ok": False, "detail": msg[:500], "channel_title": "", "channel_id": ""}
+    items = resp.get("items", [])
+    if not items:
+        return {"ok": False, "detail": "Signed in, but this Google account has no YouTube "
+                                       "channel. Create one at youtube.com first.",
+                "channel_title": "", "channel_id": ""}
+    ch = items[0]
+    granted = set((credentials_info or {}).get("scopes") or [])
+    missing = [s for s in SCOPES[:1] if granted and s not in granted]
+    if missing:
+        return {"ok": False, "detail": "Upload permission was not granted. Reconnect and tick "
+                                       "all permissions.",
+                "channel_title": ch["snippet"]["title"], "channel_id": ch["id"]}
+    return {"ok": True, "detail": f"Connected to channel “{ch['snippet']['title']}”; "
+                                  "upload permission granted.",
+            "channel_title": ch["snippet"]["title"], "channel_id": ch["id"]}

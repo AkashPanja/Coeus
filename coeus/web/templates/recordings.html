@@ -1,14 +1,37 @@
 {% extends "base.html" %}{% block title %}Recordings{% endblock %}
 {% block content %}
 <h1>Recordings</h1>
-<p class="muted">Camera folders found in <code>{{ root }}</code> (your Surveillance Station share, mounted read-only).</p>
+<p class="muted">Camera folders in <code>{{ root }}</code> · <a href="/library">change folder</a></p>
+{% if not folders %}
+<div class="card">No camera folders here. <a class="btn" href="/library">Choose the recordings folder</a></div>
+{% else %}
+{% if not accounts %}<div class="flash error">To archive a camera to YouTube you need a YouTube account. <a href="/youtube/new?next=/recordings">Add one</a>, then come back here.</div>{% endif %}
 <div class="table-wrap"><table>
-<tr><th>Folder</th><th>Camera</th><th>Archive</th><th></th></tr>
+<tr><th>Folder</th><th>Camera</th><th>YouTube account</th><th>Archive</th><th></th></tr>
 {% for f in folders %}{% set c = linked.get(f) %}
 <tr><td><a href="/recordings/{{ f|urlencode }}">{{ f }}</a></td>
-<td>{% if c %}<a href="/cameras/{{ c.id }}/edit">{{ c.name }}</a>{% else %}<a href="/cameras/new?folder={{ f|urlencode }}">create camera</a>{% endif %}</td>
-<td>{% if c and c.archive_enabled %}<span class="badge ok">daily</span>{% else %}<span class="muted">off</span>{% endif %}</td>
-<td><a href="/recordings/{{ f|urlencode }}">Browse days</a></td></tr>
-{% else %}<tr><td colspan="4" class="muted">No camera folders found. Check the <code>/recordings</code> volume mount.</td></tr>{% endfor %}
+{% if c %}
+<td><a href="/cameras/{{ c.id }}/edit">{{ c.name }}</a></td>
+<td>{% set a = accounts|selectattr('id', 'equalto', c.yt_account_id)|first %}
+  {% if a %}{{ a.name }} {% if not a.connected %}<span class="badge failed">not connected</span>{% endif %}
+  {% else %}<a href="/cameras/{{ c.id }}/edit">choose account</a>{% endif %}</td>
+<td>{% if c.archive_enabled %}<span class="badge ok">daily</span>{% else %}<span class="muted">off</span>{% endif %}</td>
+<td><a href="/recordings/{{ f|urlencode }}">Browse days</a></td>
+{% else %}
+<td colspan="3">
+  {% if accounts %}
+  <form method="post" action="/recordings/{{ f|urlencode }}/add" class="inline">{% include "_csrf.html" %}
+    <select name="yt_account_id" required style="width:auto">
+      <option value="">Upload to which YouTube account?</option>
+      {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}{{ ' (not connected)' if not a.connected }}</option>{% endfor %}
+    </select>
+    <button class="small">Add &amp; archive daily</button>
+  </form>
+  {% else %}<a href="/youtube/new?next=/recordings">Add a YouTube account</a> first{% endif %}
+  · <a href="/cameras/new?folder={{ f|urlencode }}">more options</a>
+</td><td><a href="/recordings/{{ f|urlencode }}">Browse days</a></td>
+{% endif %}</tr>
+{% endfor %}
 </table></div>
+{% endif %}
 {% endblock %}

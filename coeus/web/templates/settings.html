@@ -3,27 +3,9 @@
 <h1>Settings</h1>
 
 <div class="card" id="youtube">
-<h2 style="margin-top:0">YouTube</h2>
-{% if v['youtube.credentials'] %}
-  <p><span class="badge ok">connected</span> {{ channel or '' }}</p>
-  <form method="post" action="/settings/youtube/disconnect">{% include "_csrf.html" %}<button class="small danger">Disconnect</button></form>
-{% else %}
-  <ol class="muted">
-    <li>In <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank">Google Cloud Console</a>, enable <b>YouTube Data API v3</b>.</li>
-    <li>Configure the OAuth consent screen and add your Google account as a test user.</li>
-    <li>Create an OAuth client ID of type <b>Desktop app</b> and download its JSON.</li>
-  </ol>
-  <form method="post" action="/settings/youtube/client">{% include "_csrf.html" %}
-    <label>Step 1 — paste the client JSON</label><textarea name="client_json" rows="4" required placeholder='{"installed":{"client_id":"...","client_secret":"..."}}'></textarea>
-    <p><button>Create sign-in link</button></p></form>
-  {% if yt_auth_url %}
-  <form method="post" action="/settings/youtube/finish">{% include "_csrf.html" %}
-    <label>Step 2 — <a href="{{ yt_auth_url }}" target="_blank" rel="noopener">open this Google sign-in link</a> and approve access.</label>
-    <p class="muted">Google then sends your browser to an address starting with <code>http://localhost:1/?…code=…</code> that will not load. That is expected: copy the whole address from the address bar.</p>
-    <label>Step 3 — paste that address</label><input type="text" name="redirect_url" required>
-    <p><button>Connect</button></p></form>
-  {% endif %}
-{% endif %}
+<h2 style="margin-top:0">Recordings and YouTube</h2>
+<p>Recordings folder: <code>{{ library_path }}</code> · <a href="/library">change</a></p>
+<p>YouTube accounts: {{ accounts|length }} · <a href="/youtube">manage accounts</a> (each camera chooses its own account)</p>
 </div>
 
 <form method="post" action="/settings">{% include "_csrf.html" %}
@@ -38,7 +20,6 @@
 <div class="row">
   <div><label><input type="checkbox" name="archive__split_on_gaps" {{ 'checked' if v['archive.split_on_gaps'] }}> Start a new part at each gap</label></div>
   <div><label>After upload, merged file is</label><select name="archive__keep_merged">{% for o in ['delete','keep'] %}<option {{ 'selected' if v['archive.keep_merged']==o }}>{{ o }}</option>{% endfor %}</select></div>
-  <div><label>Max uploads per day <span class="hint">default quota ≈ 6</span></label><input type="number" min="1" name="youtube__daily_upload_limit" value="{{ v['youtube.daily_upload_limit'] }}"></div>
   <div><label>YouTube category ID <span class="hint">22 = People &amp; Blogs</span></label><input type="text" name="youtube__category_id" value="{{ v['youtube.category_id'] }}"></div>
 </div>
 </div>

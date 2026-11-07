@@ -18,7 +18,7 @@ from coeus.actions.engine import ACTION_TYPES, EVENT_TYPES
 from coeus.db import get_db
 from coeus.jobs import archive
 from coeus.models import (ActionLog, ArchiveJob, Camera, Event, FaceSample, Person, Rule, User,
-                          Zone)
+                          YouTubeAccount, Zone)
 from coeus.recordings.synology import list_camera_folders, summarize_days
 from coeus.security import (admin_user, authenticate, current_user, hash_password, throttle,
                             verify_password)
@@ -40,6 +40,14 @@ def settings_of(request: Request):
 
 def _safe_next(url: str) -> str:
     return url if url.startswith("/") and not url.startswith("//") else "/"
+
+
+def lib_root(request: Request, db: Session) -> Path:
+    return archive.recordings_root(db, settings_of(request))
+
+
+def accounts_of(db: Session) -> list[YouTubeAccount]:
+    return list(db.scalars(select(YouTubeAccount).order_by(YouTubeAccount.name)))
 
 
 def _bg(fn, *args) -> None:
@@ -90,7 +98,8 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
     events = db.scalars(select(Event).order_by(Event.ts.desc()).limit(12)).all()
     job_counts = dict(db.execute(select(ArchiveJob.status, func.count())
                                  .group_by(ArchiveJob.status)).all())
-    blocked, uploads_today, cap = archive._quota_state(db)
+    accounts = accounts_of(db)
+    quotas = {a.id: archive.quota_state(db, a) for a in accounts}
     s = settings_of(request)
     disk = None
     try:
@@ -98,8 +107,7 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
     except OSError:
         pass
     return render(request, "dashboard.html", cams=cams, statuses=statuses, events=events,
-                  job_counts=job_counts, quota_blocked=blocked, uploads_today=uploads_today,
-                  upload_cap=cap, disk=disk, yt_connected=bool(ss.get(db, "youtube.credentials")),
+                  job_counts=job_counts, accounts=accounts, quotas=quotas, disk=disk,
                   people=db.scalar(select(func.count()).select_from(Person)))
 
 
@@ -133,8 +141,9 @@ def camera_form(request: Request, cam_id: int | None = None, folder: str = "",
                                                        onvif_port=80)
     if cam is None:
         raise HTTPException(404)
-    folders = list_camera_folders(settings_of(request).recordings_dir)
-    return render(request, "camera_form.html", cam=cam, folders=folders)
+    folders = list_camera_folders(lib_root(request, db))
+    return render(request, "camera_form.html", cam=cam, folders=folders,
+                  accounts=accounts_of(db))
 
 
 @router.post("/cameras/save")
@@ -154,17 +163,34 @@ async def camera_save(request: Request, user: User = Depends(admin_user),
     cam.cooldown_s = max(0, int(form.get("cooldown_s") or 30))
     cam.monitor_enabled = form.get("monitor_enabled") == "on"
     cam.archive_enabled = form.get("archive_enabled") == "on"
+    acct_id = str(form.get("yt_account_id") or "")
+    cam.yt_account_id = int(acct_id) if acct_id.isdigit() and db.get(YouTubeAccount, int(acct_id)) \
+        else None
     if not cam.name:
         flash(request, "Name is required", "error")
         return redirect("/cameras/new")
     if cam.yt_privacy not in ("private", "unlisted", "public"):
         cam.yt_privacy = "private"
-    if cam_id is None or not cam_id:
+    if not cam_id:
         db.add(cam)
+    problem, next_url = "", "/cameras"
+    if cam.archive_enabled and not cam.recording_folder:
+        cam.archive_enabled, problem = False, "Choose a recording folder to archive this camera."
+    elif cam.archive_enabled and cam.yt_account_id is None:
+        cam.archive_enabled = False
+        if not accounts_of(db):
+            problem = ("Saved, but archiving stays off: there is no YouTube account yet. "
+                       "Add one now; you'll come back to this camera afterwards.")
+        else:
+            problem = "Saved, but archiving stays off: choose which YouTube account to upload to."
     db.flush()
+    if problem:
+        next_url = (f"/youtube/new?next=/cameras/{cam.id}/edit" if not accounts_of(db)
+                    and "no YouTube account" in problem else f"/cameras/{cam.id}/edit")
+    db.commit()
     rt(request).sync_monitors()
-    flash(request, f"Saved camera {cam.name}")
-    return redirect("/cameras")
+    flash(request, problem or f"Saved camera {cam.name}", "error" if problem else "ok")
+    return redirect(next_url)
 
 
 @router.post("/cameras/{cam_id}/delete")
@@ -188,6 +214,32 @@ def onvif_probe(host: str = Form(...), port: int = Form(80), username: str = For
                                                                      password)})
     except Exception as err:  # noqa: BLE001
         return JSONResponse({"ok": False, "error": str(err)}, status_code=200)
+
+
+@router.post("/cameras/test-stream")
+def camera_test_stream(url: str = Form(...), user: User = Depends(admin_user)):
+    import base64
+    import cv2
+    if not url.startswith(("rtsp://", "rtsps://", "http://", "https://")):
+        return JSONResponse({"ok": False, "error": "URL must start with rtsp:// or http(s)://"})
+    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    try:
+        if not cap.isOpened():
+            return JSONResponse({"ok": False, "error": "cannot open stream (address, login "
+                                                       "or network)"})
+        for _ in range(15):
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                h, w = frame.shape[:2]
+                small = cv2.resize(frame, (320, int(320 * h / w))) if w > 320 else frame
+                _, buf = cv2.imencode(".jpg", small)
+                return JSONResponse({"ok": True, "width": w, "height": h,
+                                     "fps": round(cap.get(cv2.CAP_PROP_FPS) or 0, 1),
+                                     "preview": "data:image/jpeg;base64,"
+                                                + base64.b64encode(buf.tobytes()).decode()})
+        return JSONResponse({"ok": False, "error": "connected but no frames were decoded"})
+    finally:
+        cap.release()
 
 
 @router.get("/cameras/{cam_id}/snapshot.jpg")
@@ -264,21 +316,46 @@ async def zones_save(request: Request, cam_id: int, user: User = Depends(admin_u
 @router.get("/recordings")
 def recordings(request: Request, user: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
     request.state.user = user
-    root = settings_of(request).recordings_dir
+    root = lib_root(request, db)
     folders = list_camera_folders(root)
     linked = {c.recording_folder: c for c in db.scalars(select(Camera))
               if c.recording_folder}
-    return render(request, "recordings.html", folders=folders, linked=linked, root=root)
+    return render(request, "recordings.html", folders=folders, linked=linked, root=root,
+                  root_rel=ss.get(db, "library.root") or "", accounts=accounts_of(db))
+
+
+@router.post("/recordings/{folder}/add")
+def recording_add_camera(request: Request, folder: str, yt_account_id: str = Form(""),
+                         user: User = Depends(admin_user),
+                         db: Session = Depends(get_db, scope="function")):
+    if folder not in list_camera_folders(lib_root(request, db)):
+        raise HTTPException(404)
+    if db.scalar(select(Camera).where(Camera.recording_folder == folder)):
+        flash(request, f"“{folder}” already has a camera", "error")
+        return redirect("/recordings")
+    acct = db.get(YouTubeAccount, int(yt_account_id)) if yt_account_id.isdigit() else None
+    if acct is None:
+        flash(request, f"Choose which YouTube account “{folder}” should upload to"
+              + ("" if accounts_of(db) else " — add one first") + ".", "error")
+        return redirect("/recordings" if accounts_of(db) else "/youtube/new?next=/recordings")
+    name = folder
+    if db.scalar(select(Camera).where(Camera.name == name)):
+        name = f"{folder} (recordings)"
+    db.add(Camera(name=name, recording_folder=folder, archive_enabled=True,
+                  yt_account_id=acct.id))
+    flash(request, f"Added “{folder}”: archived daily to {acct.name}"
+          + ("" if acct.connected else " (account not connected yet!)"))
+    return redirect("/recordings")
 
 
 @router.get("/recordings/{folder}")
 def recording_days(request: Request, folder: str, user: User = Depends(admin_user),
                    db: Session = Depends(get_db, scope="function")):
     request.state.user = user
-    s = settings_of(request)
-    if folder not in list_camera_folders(s.recordings_dir):
+    root = lib_root(request, db)
+    if folder not in list_camera_folders(root):
         raise HTTPException(404)
-    days = summarize_days(s.recordings_dir, folder,
+    days = summarize_days(root, folder,
                           settle_seconds=float(ss.get(db, "archive.settle_minutes")) * 60)
     jobs = db.scalars(select(ArchiveJob).where(ArchiveJob.camera_folder == folder)).all()
     by_day: dict[str, list[ArchiveJob]] = {}
@@ -291,8 +368,12 @@ def recording_days(request: Request, folder: str, user: User = Depends(admin_use
 def archive_day(request: Request, folder: str, day: str, replan: str = Form(""),
                 user: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
     s = settings_of(request)
-    if folder not in list_camera_folders(s.recordings_dir):
+    if folder not in list_camera_folders(lib_root(request, db)):
         raise HTTPException(404)
+    cam = db.scalar(select(Camera).where(Camera.recording_folder == folder))
+    if cam is None or cam.yt_account_id is None:
+        flash(request, f"Choose a YouTube account for “{folder}” first", "error")
+        return redirect("/recordings")
     try:
         d = date.fromisoformat(day)
         jobs = archive.plan_day(db, s, folder, d, replace=bool(replan))
@@ -310,9 +391,9 @@ def jobs_page(request: Request, user: User = Depends(admin_user), db: Session = 
     request.state.user = user
     jobs = db.scalars(select(ArchiveJob).order_by(ArchiveJob.day.desc(), ArchiveJob.camera_folder,
                                                   ArchiveJob.part).limit(300)).all()
-    blocked, count, cap = archive._quota_state(db)
-    return render(request, "jobs.html", jobs=jobs, quota_blocked=blocked, uploads_today=count,
-                  upload_cap=cap)
+    accounts = accounts_of(db)
+    return render(request, "jobs.html", jobs=jobs, accounts=accounts,
+                  quotas={a.id: archive.quota_state(db, a) for a in accounts})
 
 
 @router.post("/jobs/{job_id}/retry")
@@ -618,7 +699,7 @@ def event_delete(eid: int, user: User = Depends(admin_user), db: Session = Depen
 EDITABLE = {
     "archive.schedule_time": str, "archive.max_part_hours": float, "archive.gap_minutes": float,
     "archive.split_on_gaps": bool, "archive.keep_merged": str, "archive.settle_minutes": float,
-    "youtube.category_id": str, "youtube.daily_upload_limit": int,
+    "youtube.category_id": str,
     "faces.threshold": float, "faces.dedupe_seconds": float,
     "llm.provider": str, "llm.model": str, "llm.base_url": str, "llm.max_calls_per_hour": int,
     "ha.url": str, "events.retention_days": int,
@@ -632,12 +713,9 @@ def settings_page(request: Request, user: User = Depends(admin_user),
     request.state.user = user
     values = {k: ss.get(db, k) for k in ss.DEFAULTS}
     masked = {k: ss.mask(values.get(k)) for k in SECRET_FIELDS}
-    channel = None
-    if values.get("youtube.credentials"):
-        channel = request.session.get("yt_channel")
-    return render(request, "settings.html", v=values, masked=masked, channel=channel,
-                  yt_auth_url=request.session.get("yt_auth_url"),
-                  tz=settings_of(request).timezone)
+    return render(request, "settings.html", v=values, masked=masked,
+                  tz=settings_of(request).timezone, accounts=accounts_of(db),
+                  library_path=lib_root(request, db))
 
 
 @router.post("/settings")
@@ -679,52 +757,6 @@ async def settings_save(request: Request, user: User = Depends(admin_user),
     rt(request).invalidate_config()
     flash(request, "Settings saved")
     return redirect("/settings")
-
-
-@router.post("/settings/youtube/client")
-def youtube_client(request: Request, client_json: str = Form(...),
-                   user: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
-    try:
-        cfg = yt.normalise_client_config(client_json)
-        url, state, verifier = yt.start_authorization(cfg)
-    except Exception as err:  # noqa: BLE001
-        flash(request, f"Invalid client JSON: {err}", "error")
-        return redirect("/settings#youtube")
-    ss.set_(db, "youtube.client_config", cfg)
-    request.session["yt_verifier"] = verifier
-    request.session["yt_auth_url"] = url
-    return redirect("/settings#youtube")
-
-
-@router.post("/settings/youtube/finish")
-def youtube_finish(request: Request, redirect_url: str = Form(...),
-                   user: User = Depends(admin_user), db: Session = Depends(get_db, scope="function")):
-    cfg = ss.get(db, "youtube.client_config")
-    verifier = request.session.get("yt_verifier")
-    if not cfg or not verifier:
-        flash(request, "Start the connection again (step 1)", "error")
-        return redirect("/settings#youtube")
-    try:
-        creds = yt.finish_authorization(cfg, verifier, redirect_url)
-        ss.set_(db, "youtube.credentials", creds)
-        db.commit()
-        service = yt.build_service(creds)
-        request.session["yt_channel"] = yt.channel_title(service)
-        flash(request, f"Connected YouTube channel: {request.session['yt_channel']}")
-    except Exception as err:  # noqa: BLE001
-        flash(request, f"Could not finish YouTube authorization: {err}", "error")
-    request.session.pop("yt_verifier", None)
-    request.session.pop("yt_auth_url", None)
-    return redirect("/settings#youtube")
-
-
-@router.post("/settings/youtube/disconnect")
-def youtube_disconnect(request: Request, user: User = Depends(admin_user),
-                       db: Session = Depends(get_db, scope="function")):
-    ss.set_(db, "youtube.credentials", None)
-    request.session.pop("yt_channel", None)
-    flash(request, "YouTube disconnected")
-    return redirect("/settings#youtube")
 
 
 @router.post("/settings/test/ha")

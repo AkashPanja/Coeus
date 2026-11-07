@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% block title %}Add YouTube account{% endblock %}
+{% block content %}
+<h1>Add YouTube account</h1>
+<form method="post" action="/youtube/new" class="card">{% include "_csrf.html" %}
+<input type="hidden" name="next" value="{{ next }}">
+<div class="row">
+  <div><label>Name <span class="hint">for you, e.g. “Home channel”</span></label><input type="text" name="name" required></div>
+  <div><label>Max uploads per day</label><input type="number" name="daily_upload_limit" min="1" max="100" value="6"></div>
+</div>
+{% if reuse %}
+<label>Use the OAuth client of an existing account <span class="hint">same Google project, so the quota is shared; sign in with a different Google account in the next step</span></label>
+<select name="reuse_from" onchange="document.getElementById('cj').style.display=this.value?'none':''">
+  <option value="">— no, paste a new client below —</option>
+  {% for a in reuse %}<option value="{{ a.id }}">{{ a.name }} ({{ a.client_id[:20] }}…)</option>{% endfor %}
+</select>
+{% endif %}
+<div id="cj">
+<label>OAuth client JSON</label>
+<ol class="muted">
+  <li>In <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a>, create a project and enable <b>YouTube Data API v3</b>.</li>
+  <li>Set up the OAuth consent screen and add the Google account that owns the channel as a test user. In “Testing” mode the sign-in expires after 7 days; publish the app to avoid that.</li>
+  <li>Under <b>Credentials → Create credentials → OAuth client ID</b>, choose type <b>Desktop app</b> and download the JSON.</li>
+</ol>
+<textarea name="client_json" rows="5" placeholder='{"installed":{"client_id":"…apps.googleusercontent.com","client_secret":"…"}}'></textarea>
+</div>
+<p><button>Next: sign in with Google</button> <a href="{{ next }}">Cancel</a></p>
+</form>
+{% endblock %}

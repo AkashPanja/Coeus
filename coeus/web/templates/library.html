@@ -1,0 +1,44 @@
+{% extends "base.html" %}{% block title %}Recordings folder{% endblock %}
+{% block content %}
+<h1>Recordings folder</h1>
+{% if missing %}
+<div class="flash error">The mounted path <code>{{ mount }}</code> does not exist in the container. Add a volume in docker-compose.yml, for example <code>/volume1/surveillance:/recordings:ro</code>.</div>
+{% else %}
+<div class="card">
+  <div>Mounted path: <code>{{ mount }}</code></div>
+  <div>Current folder: <code>{{ '/' ~ current if current else '/' }}</code>
+    {% if current_info.kind == 'library' %}<span class="badge ok">{{ current_info.cameras }} camera folder(s)</span>{% else %}<span class="badge failed">no camera folders</span>{% endif %}</div>
+</div>
+
+{% if suggestions %}
+<h2>Detected automatically</h2>
+<div class="grid">
+{% for s in suggestions %}
+<form method="post" action="/library/select" class="card">{% include "_csrf.html" %}
+  <input type="hidden" name="path" value="{{ s.rel }}">
+  <strong>{{ '/' ~ s.rel if s.rel else '/ (mounted path)' }}</strong>
+  <div class="muted">{{ s.cameras }} camera folder(s)</div>
+  <p><button class="small" {{ 'disabled' if s.rel == current }}>{{ 'In use' if s.rel == current else 'Use this' }}</button></p>
+</form>
+{% endfor %}
+</div>
+{% endif %}
+
+<h2>Browse</h2>
+<div class="card">
+  <p>{% for name, rel in crumbs %}<a href="/library?path={{ rel|urlencode }}">{{ name }}</a>{{ ' › ' if not loop.last }}{% endfor %}</p>
+  <form method="post" action="/library/select">{% include "_csrf.html" %}
+    <input type="hidden" name="path" value="{{ here.rel }}">
+    <button>Select this folder</button>
+    <span class="muted">{% if here.kind == 'library' %}contains {{ here.cameras }} camera folder(s){% elif here.kind == 'camera' %}this is a camera folder; its parent will be used{% else %}Coeus will look inside for camera folders{% endif %}</span>
+  </form>
+  <div class="table-wrap" style="margin-top:10px"><table>
+    <tr><th>Folder</th><th>Looks like</th></tr>
+    {% for c in children %}
+    <tr><td><a href="/library?path={{ c.rel|urlencode }}">📁 {{ c.name }}</a></td>
+    <td>{% if c.kind == 'library' %}<span class="badge ok">{{ c.cameras }} cameras inside</span>{% elif c.kind == 'camera' %}<span class="badge">camera folder</span>{% else %}<span class="muted">folder</span>{% endif %}</td></tr>
+    {% else %}<tr><td colspan="2" class="muted">No subfolders.</td></tr>{% endfor %}
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}

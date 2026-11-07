@@ -15,12 +15,11 @@ DEFAULTS: dict[str, Any] = {
     "archive.split_on_gaps": False,
     "archive.keep_merged": "delete",  # delete|keep
     "archive.settle_minutes": 5,
-    # YouTube
-    "youtube.client_config": None,  # OAuth client JSON (desktop app)
-    "youtube.credentials": None,    # authorized-user JSON (refresh token)
+    # Recordings library: folder (relative to the mounted path) that holds the camera folders
+    "library.root": "",
+    # YouTube (accounts live in their own table; quota state is keyed by OAuth client id)
     "youtube.category_id": "22",
-    "youtube.daily_upload_limit": 6,
-    "youtube.quota_blocked_until": None,
+    "youtube.quota": {},  # {client_id: {"date": ..., "count": n, "blocked_until": iso}}
     # Face recognition
     "faces.threshold": 0.363,
     "faces.dedupe_seconds": 60,
@@ -37,7 +36,7 @@ DEFAULTS: dict[str, Any] = {
     "events.retention_days": 30,
 }
 
-SECRET_KEYS = {"llm.api_key", "ha.token", "youtube.credentials", "youtube.client_config"}
+SECRET_KEYS = {"llm.api_key", "ha.token"}
 
 
 def get(db: Session, key: str) -> Any:

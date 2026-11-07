@@ -72,8 +72,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def healthz():
         return JSONResponse({"ok": True})
 
-    from coeus.web import routes
+    from coeus.web import routes, routes_youtube
     app.include_router(routes.router)
+    app.include_router(routes_youtube.router)
     return app
 
 

@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% block title %}YouTube accounts{% endblock %}
+{% block content %}
+<h1>YouTube accounts <a class="btn secondary" href="/youtube/new">Add account</a></h1>
+<p class="muted">Each camera uploads to the account you choose for it. Accounts that share an OAuth client (one Google Cloud project) also share that project's daily quota.</p>
+{% for a in accounts %}{% set q = quotas[a.id] %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+    <div>
+      <strong>{{ a.name }}</strong>
+      {% if not a.connected %}<span class="badge failed">not connected</span>
+      {% elif a.last_test_ok %}<span class="badge ok">working</span>
+      {% elif a.last_test_ok == false %}<span class="badge failed">test failed</span>
+      {% else %}<span class="badge">untested</span>{% endif %}
+      <div class="muted">Channel: {{ a.channel_title or '—' }} · project client {{ a.client_id[:12] }}… ·
+        uploads today {{ q[1] }}/{{ q[2] }}{% if q[0] %} · <b>quota exhausted</b>{% endif %}</div>
+      <div class="muted">Cameras: {{ (cams.get(a.id) or ['none'])|join(', ') }}</div>
+      {% if a.last_test_at %}<div class="muted">Last test {{ a.last_test_at|localtime }}: {{ a.last_test_detail }}</div>{% endif %}
+    </div>
+    <div>
+      {% if a.connected %}<form method="post" action="/youtube/{{ a.id }}/test" class="inline">{% include "_csrf.html" %}<button class="small">Test</button></form>{% endif %}
+      <form method="post" action="/youtube/{{ a.id }}/reconnect" class="inline">{% include "_csrf.html" %}<button class="small secondary">{{ 'Reconnect' if a.connected else 'Connect' }}</button></form>
+      <form method="post" action="/youtube/{{ a.id }}/delete" class="inline" onsubmit="return confirm('Remove {{ a.name }}? Cameras using it stop archiving.')">{% include "_csrf.html" %}<button class="small danger">Remove</button></form>
+    </div>
+  </div>
+  <form method="post" action="/youtube/{{ a.id }}/update" class="row" style="margin-top:8px">{% include "_csrf.html" %}
+    <div><label>Name</label><input type="text" name="name" value="{{ a.name }}"></div>
+    <div><label>Max uploads per day <span class="hint">default quota ≈ 6</span></label><input type="number" min="1" max="100" name="daily_upload_limit" value="{{ a.daily_upload_limit }}"></div>
+    <div><label>&nbsp;</label><button class="small secondary">Save</button></div>
+  </form>
+</div>
+{% else %}
+<div class="card">No YouTube accounts yet. <a href="/youtube/new">Add the first one</a>.</div>
+{% endfor %}
+{% endblock %}

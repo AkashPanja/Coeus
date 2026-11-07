@@ -2,7 +2,7 @@
 {% block content %}
 <h1>Archive jobs
 <form method="post" action="/jobs/run" class="inline">{% include "_csrf.html" %}<button class="small secondary">Run worker now</button></form></h1>
-<p class="muted">YouTube uploads today: {{ uploads_today }} / {{ upload_cap }}{% if quota_blocked %} · <b>quota exhausted</b>, uploads resume after midnight Pacific time{% endif %}.</p>
+<p class="muted">Uploads today: {% for a in accounts %}{% set q = quotas[a.id] %}{{ a.name }} {{ q[1] }}/{{ q[2] }}{% if q[0] %} (quota exhausted until midnight Pacific){% endif %}{{ ' · ' if not loop.last }}{% else %}no YouTube accounts — <a href="/youtube/new">add one</a>{% endfor %}</p>
 <div class="table-wrap"><table>
 <tr><th>Day</th><th>Camera folder</th><th>Part</th><th>Length</th><th>Segments</th><th>Status</th><th>Video</th><th>Detail</th><th></th></tr>
 {% for j in jobs %}

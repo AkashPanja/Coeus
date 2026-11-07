@@ -16,7 +16,8 @@ services:
       # Used to build snapshot links in notifications:
       COEUS_PUBLIC_URL: ${COEUS_PUBLIC_URL:-http://192.168.0.111:8765}
     volumes:
-      # Surveillance Station recordings, read-only.
+      # Surveillance Station recordings, read-only. You may mount a parent folder
+      # (e.g. /volume1:/recordings:ro) and pick the recordings folder in the UI.
       - /volume1/surveillance:/recordings:ro
       # Database, face photos, event snapshots, merged videos (needs ~15 GB free per camera/day).
       - /volume1/docker/coeus:/data
