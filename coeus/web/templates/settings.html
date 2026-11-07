@@ -1,0 +1,83 @@
+{% extends "base.html" %}{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<div class="card" id="youtube">
+<h2 style="margin-top:0">YouTube</h2>
+{% if v['youtube.credentials'] %}
+  <p><span class="badge ok">connected</span> {{ channel or '' }}</p>
+  <form method="post" action="/settings/youtube/disconnect">{% include "_csrf.html" %}<button class="small danger">Disconnect</button></form>
+{% else %}
+  <ol class="muted">
+    <li>In <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank">Google Cloud Console</a>, enable <b>YouTube Data API v3</b>.</li>
+    <li>Configure the OAuth consent screen and add your Google account as a test user.</li>
+    <li>Create an OAuth client ID of type <b>Desktop app</b> and download its JSON.</li>
+  </ol>
+  <form method="post" action="/settings/youtube/client">{% include "_csrf.html" %}
+    <label>Step 1 — paste the client JSON</label><textarea name="client_json" rows="4" required placeholder='{"installed":{"client_id":"...","client_secret":"..."}}'></textarea>
+    <p><button>Create sign-in link</button></p></form>
+  {% if yt_auth_url %}
+  <form method="post" action="/settings/youtube/finish">{% include "_csrf.html" %}
+    <label>Step 2 — <a href="{{ yt_auth_url }}" target="_blank" rel="noopener">open this Google sign-in link</a> and approve access.</label>
+    <p class="muted">Google then sends your browser to an address starting with <code>http://localhost:1/?…code=…</code> that will not load. That is expected: copy the whole address from the address bar.</p>
+    <label>Step 3 — paste that address</label><input type="text" name="redirect_url" required>
+    <p><button>Connect</button></p></form>
+  {% endif %}
+{% endif %}
+</div>
+
+<form method="post" action="/settings">{% include "_csrf.html" %}
+<div class="card">
+<h2 style="margin-top:0">Daily archive</h2>
+<div class="row">
+  <div><label>Run every day at <span class="hint">({{ tz }})</span></label><input type="time" name="archive__schedule_time" value="{{ v['archive.schedule_time'] }}"></div>
+  <div><label>Maximum part length (hours) <span class="hint">YouTube's limit is 12</span></label><input type="number" step="0.1" min="0.5" max="11.9" name="archive__max_part_hours" value="{{ v['archive.max_part_hours'] }}"></div>
+  <div><label>Gap that counts as missing footage (min)</label><input type="number" step="0.5" name="archive__gap_minutes" value="{{ v['archive.gap_minutes'] }}"></div>
+  <div><label>Treat a segment as finished after (min)</label><input type="number" step="1" name="archive__settle_minutes" value="{{ v['archive.settle_minutes'] }}"></div>
+</div>
+<div class="row">
+  <div><label><input type="checkbox" name="archive__split_on_gaps" {{ 'checked' if v['archive.split_on_gaps'] }}> Start a new part at each gap</label></div>
+  <div><label>After upload, merged file is</label><select name="archive__keep_merged">{% for o in ['delete','keep'] %}<option {{ 'selected' if v['archive.keep_merged']==o }}>{{ o }}</option>{% endfor %}</select></div>
+  <div><label>Max uploads per day <span class="hint">default quota ≈ 6</span></label><input type="number" min="1" name="youtube__daily_upload_limit" value="{{ v['youtube.daily_upload_limit'] }}"></div>
+  <div><label>YouTube category ID <span class="hint">22 = People &amp; Blogs</span></label><input type="text" name="youtube__category_id" value="{{ v['youtube.category_id'] }}"></div>
+</div>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">Face recognition</h2>
+<div class="row">
+  <div><label>Match threshold <span class="hint">cosine similarity; higher = stricter (0.363 recommended)</span></label><input type="number" step="0.01" min="0.1" max="0.95" name="faces__threshold" value="{{ v['faces.threshold'] }}"></div>
+  <div><label>Same-person cooldown (s)</label><input type="number" min="0" name="faces__dedupe_seconds" value="{{ v['faces.dedupe_seconds'] }}"></div>
+  <div><label>Keep events for (days)</label><input type="number" min="1" name="events__retention_days" value="{{ v['events.retention_days'] }}"></div>
+</div>
+</div>
+
+<div class="card" id="llm">
+<h2 style="margin-top:0">LLM provider</h2>
+<p class="muted">Used to describe snapshots and to help identify faces when a camera's face mode includes LLM. Cloud providers receive images from your cameras; Ollama keeps everything on your network.</p>
+<div class="row">
+  <div><label>Provider</label><select name="llm__provider">
+    {% for val, label in [('none','None (on-device only)'),('anthropic','Anthropic Claude'),('openai','OpenAI-compatible (OpenAI, Gemini, Ollama, OpenRouter…)')] %}
+    <option value="{{ val }}" {{ 'selected' if v['llm.provider']==val }}>{{ label }}</option>{% endfor %}</select></div>
+  <div><label>Model <span class="hint">blank = default (claude-opus-5-5 / gpt-4o-mini)</span></label><input type="text" name="llm__model" value="{{ v['llm.model'] }}" placeholder="e.g. claude-opus-5-5, gemini-2.5-flash, llava"></div>
+  <div><label>Base URL <span class="hint">OpenAI-compatible only</span></label><input type="text" name="llm__base_url" value="{{ v['llm.base_url'] }}" placeholder="http://192.168.0.111:11434/v1"></div>
+  <div><label>API key <span class="hint">{{ masked['llm.api_key'] or 'not set' }} · “-” clears</span></label><input type="password" name="llm__api_key" autocomplete="off"></div>
+  <div><label>Max LLM calls per hour</label><input type="number" min="1" name="llm__max_calls_per_hour" value="{{ v['llm.max_calls_per_hour'] }}"></div>
+</div>
+</div>
+
+<div class="card" id="ha">
+<h2 style="margin-top:0">Home Assistant</h2>
+<div class="row">
+  <div><label>URL</label><input type="text" name="ha__url" value="{{ v['ha.url'] }}" placeholder="http://192.168.0.111:8123"></div>
+  <div><label>Long-lived access token <span class="hint">{{ masked['ha.token'] or 'not set' }} · “-” clears</span></label><input type="password" name="ha__token" autocomplete="off"></div>
+</div>
+</div>
+<p><button>Save settings</button></p>
+</form>
+
+<div class="card">
+<form method="post" action="/settings/test/ha" class="inline">{% include "_csrf.html" %}<button class="secondary">Test Home Assistant</button></form>
+<form method="post" action="/settings/test/llm" class="inline">{% include "_csrf.html" %}<button class="secondary">Test LLM</button></form>
+</div>
+{% endblock %}

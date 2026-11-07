@@ -1,0 +1,19 @@
+{% extends "base.html" %}{% block title %}Rules{% endblock %}
+{% block content %}
+<h1>Rules <a class="btn secondary" href="/rules/new">Add rule</a></h1>
+<div class="table-wrap"><table>
+<tr><th>Name</th><th>When</th><th>Where</th><th>Who</th><th>Actions</th><th>Last fired</th><th></th></tr>
+{% for r in rules %}
+<tr><td><strong>{{ r.name }}</strong> {% if not r.enabled %}<span class="badge">disabled</span>{% endif %}</td>
+<td>{{ (r.event_types or ['any event'])|join(', ') }}{% if r.time_start %}<br><span class="muted">{{ r.time_start }}–{{ r.time_end }}</span>{% endif %}</td>
+<td>{% if r.camera_ids %}{% for c in r.camera_ids %}{{ cams.get(c, '?') }}{{ ', ' if not loop.last }}{% endfor %}{% else %}any camera{% endif %}
+  {% if r.zone_names %}<br><span class="muted">{{ r.zone_names|join(', ') }}</span>{% endif %}</td>
+<td>{% if r.person_ids %}{% for p in r.person_ids %}{{ people.get(p, '?') }}{{ ', ' if not loop.last }}{% endfor %}{% else %}anyone{% endif %}</td>
+<td>{% for a in r.actions %}<span class="badge">{{ a.type }}</span> {% endfor %}</td>
+<td>{{ r.last_fired_at|localtime }}</td>
+<td><a href="/rules/{{ r.id }}/edit">Edit</a>
+<form method="post" action="/rules/{{ r.id }}/test" class="inline">{% include "_csrf.html" %}<button class="small secondary">Test</button></form>
+<form method="post" action="/rules/{{ r.id }}/delete" class="inline" onsubmit="return confirm('Delete rule?')">{% include "_csrf.html" %}<button class="small danger">Delete</button></form></td></tr>
+{% else %}<tr><td colspan="7" class="muted">No rules yet.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% block title %}People{% endblock %}
+{% block content %}
+<h1>People</h1>
+<form method="post" action="/persons" class="card">{% include "_csrf.html" %}
+<div class="row"><div><label>Name</label><input type="text" name="name" required></div>
+<div><label>Notes</label><input type="text" name="notes"></div></div>
+<p><button>Add person</button></p></form>
+<div class="grid">
+{% for p in people %}
+<a class="card" href="/persons/{{ p.id }}" style="color:inherit">
+  <strong>{{ p.name }}</strong> <span class="muted">{{ p.samples|length }} photo(s)</span>
+  <div style="display:flex;gap:6px;margin-top:8px">{% for s in p.samples[:4] %}<img class="face" src="/media/faces/{{ s.id }}" alt="">{% endfor %}</div>
+  {% if not p.samples %}<div class="muted">Add face photos to recognise this person.</div>{% endif %}
+</a>
+{% else %}<div class="muted">No people yet.</div>{% endfor %}
+</div>
+{% endblock %}

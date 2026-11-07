@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% block title %}Account{% endblock %}
+{% block content %}
+<h1>Account</h1>
+<form method="post" action="/users/password" class="card">{% include "_csrf.html" %}
+<h2 style="margin-top:0">Change your password</h2>
+<div class="row"><div><label>Current password</label><input type="password" name="current" required autocomplete="current-password"></div>
+<div><label>New password</label><input type="password" name="new" minlength="8" required autocomplete="new-password"></div></div>
+<p><button>Change password</button></p></form>
+{% if user.is_admin %}
+<h2>Users</h2>
+<div class="table-wrap"><table><tr><th>Username</th><th>Role</th><th>Created</th><th></th></tr>
+{% for u in users %}<tr><td>{{ u.username }}</td><td>{{ 'admin' if u.is_admin else 'viewer' }}</td><td>{{ u.created_at|localtime }}</td>
+<td>{% if u.id != user.id %}<form method="post" action="/users/{{ u.id }}/delete" onsubmit="return confirm('Delete user?')">{% include "_csrf.html" %}<button class="small danger">Delete</button></form>{% endif %}</td></tr>{% endfor %}
+</table></div>
+<form method="post" action="/users" class="card" style="margin-top:14px">{% include "_csrf.html" %}
+<div class="row"><div><label>Username</label><input type="text" name="username" required></div>
+<div><label>Password</label><input type="password" name="password" minlength="8" required autocomplete="new-password"></div>
+<div><label><input type="checkbox" name="is_admin" checked> Admin</label></div></div>
+<p><button>Add user</button></p></form>
+{% endif %}
+{% endblock %}

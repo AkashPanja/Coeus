@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}Coeus{% endblock %} · Coeus</title>
+<link rel="stylesheet" href="/static/style.css">
+<meta name="csrf-token" content="{{ csrf_token(request) }}">
+</head>
+<body>
+{% if user %}
+<header>
+  <span class="brand">Coeus</span>
+  {% set p = request.url.path %}
+  <nav>
+    <a href="/" class="{{ 'active' if p == '/' }}">Dashboard</a>
+    <a href="/events" class="{{ 'active' if p.startswith('/events') }}">Events</a>
+    {% if user.is_admin %}
+    <a href="/cameras" class="{{ 'active' if p.startswith('/cameras') }}">Cameras</a>
+    <a href="/recordings" class="{{ 'active' if p.startswith('/recordings') }}">Recordings</a>
+    <a href="/jobs" class="{{ 'active' if p.startswith('/jobs') }}">Archive jobs</a>
+    <a href="/persons" class="{{ 'active' if p.startswith('/persons') }}">People</a>
+    <a href="/rules" class="{{ 'active' if p.startswith('/rules') }}">Rules</a>
+    <a href="/settings" class="{{ 'active' if p.startswith('/settings') }}">Settings</a>
+    {% endif %}
+    <a href="/users" class="{{ 'active' if p.startswith('/users') }}">Account</a>
+  </nav>
+  <form method="post" action="/logout" class="inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
+    <span class="muted">{{ user.username }}</span> <button class="small secondary">Log out</button>
+  </form>
+</header>
+{% endif %}
+<main>
+{% if flash %}<div class="flash {{ flash.kind }}">{{ flash.message }}</div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% block title %}Recordings{% endblock %}
+{% block content %}
+<h1>Recordings</h1>
+<p class="muted">Camera folders found in <code>{{ root }}</code> (your Surveillance Station share, mounted read-only).</p>
+<div class="table-wrap"><table>
+<tr><th>Folder</th><th>Camera</th><th>Archive</th><th></th></tr>
+{% for f in folders %}{% set c = linked.get(f) %}
+<tr><td><a href="/recordings/{{ f|urlencode }}">{{ f }}</a></td>
+<td>{% if c %}<a href="/cameras/{{ c.id }}/edit">{{ c.name }}</a>{% else %}<a href="/cameras/new?folder={{ f|urlencode }}">create camera</a>{% endif %}</td>
+<td>{% if c and c.archive_enabled %}<span class="badge ok">daily</span>{% else %}<span class="muted">off</span>{% endif %}</td>
+<td><a href="/recordings/{{ f|urlencode }}">Browse days</a></td></tr>
+{% else %}<tr><td colspan="4" class="muted">No camera folders found. Check the <code>/recordings</code> volume mount.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}

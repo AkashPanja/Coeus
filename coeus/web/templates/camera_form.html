@@ -1,0 +1,63 @@
+{% extends "base.html" %}{% block title %}Camera{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if cam.id else 'Add' }} camera</h1>
+<form method="post" action="/cameras/save" class="card">
+{% include "_csrf.html" %}
+<input type="hidden" name="id" value="{{ cam.id or '' }}">
+<div class="row">
+  <div><label>Name</label><input type="text" name="name" value="{{ cam.name or '' }}" required></div>
+  <div><label>Recording folder <span class="hint">(Surveillance Station folder)</span></label>
+    <select name="recording_folder"><option value="">— none —</option>
+    {% for f in folders %}<option {{ 'selected' if f == cam.recording_folder }}>{{ f }}</option>{% endfor %}
+    </select></div>
+</div>
+
+<h2>Live stream</h2>
+<div class="row">
+  <div><label>Main RTSP URL <span class="hint">used for snapshots</span></label><input type="text" name="rtsp_url" id="rtsp_url" value="{{ cam.rtsp_url or '' }}" placeholder="rtsp://user:pass@192.168.0.50:554/stream1"></div>
+  <div><label>Detection RTSP URL <span class="hint">sub-stream, optional (lower CPU)</span></label><input type="text" name="sub_rtsp_url" id="sub_rtsp_url" value="{{ cam.sub_rtsp_url or '' }}"></div>
+</div>
+<details><summary>Get stream URLs from ONVIF</summary>
+<div class="row">
+  <div><label>ONVIF host</label><input type="text" name="onvif_host" id="onvif_host" value="{{ cam.onvif_host or '' }}"></div>
+  <div><label>Port</label><input type="number" name="onvif_port" id="onvif_port" value="{{ cam.onvif_port or 80 }}"></div>
+  <div><label>Username</label><input type="text" name="onvif_user" id="onvif_user" value="{{ cam.onvif_user or '' }}"></div>
+  <div><label>Password <span class="hint">{{ 'leave blank to keep' if cam.onvif_password }}</span></label><input type="password" name="onvif_password" id="onvif_password"></div>
+</div>
+<p><button type="button" class="secondary" onclick="probe()">Query camera</button> <span id="probe_out" class="muted"></span></p>
+</details>
+<div class="row">
+  <div><label><input type="checkbox" name="monitor_enabled" {{ 'checked' if cam.monitor_enabled }}> Monitor this camera live</label></div>
+  <div><label>Detection FPS</label><input type="number" step="0.5" min="0.5" max="15" name="detect_fps" value="{{ cam.detect_fps }}"></div>
+  <div><label>Motion event cooldown (s)</label><input type="number" min="0" name="cooldown_s" value="{{ cam.cooldown_s }}"></div>
+  <div><label>Face recognition</label><select name="face_mode">
+    {% for m, label in [('local','On-device'),('local+llm','On-device, LLM if unknown'),('llm','LLM only'),('off','Off (motion only)')] %}
+    <option value="{{ m }}" {{ 'selected' if cam.face_mode == m }}>{{ label }}</option>{% endfor %}</select></div>
+</div>
+
+<h2>YouTube archive</h2>
+<div class="row">
+  <div><label><input type="checkbox" name="archive_enabled" {{ 'checked' if cam.archive_enabled }}> Merge and upload daily</label></div>
+  <div><label>Privacy</label><select name="yt_privacy">{% for p in ['private','unlisted','public'] %}<option {{ 'selected' if cam.yt_privacy == p }}>{{ p }}</option>{% endfor %}</select></div>
+  <div><label>Playlist ID <span class="hint">optional</span></label><input type="text" name="yt_playlist_id" value="{{ cam.yt_playlist_id or '' }}"></div>
+</div>
+<label>Title template <span class="hint">{camera} {date} {part} {parts} {start} {end}</span></label>
+<input type="text" name="yt_title_template" value="{{ cam.yt_title_template }}">
+<p><button>Save</button> <a href="/cameras">Cancel</a></p>
+</form>
+<script>
+async function probe(){
+  const out=document.getElementById('probe_out'); out.textContent='Querying…';
+  const fd=new FormData();
+  fd.append('host',onvif_host.value); fd.append('port',onvif_port.value||80);
+  fd.append('username',onvif_user.value); fd.append('password',onvif_password.value);
+  const r=await fetch('/cameras/onvif-probe',{method:'POST',body:fd,headers:{'X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content}});
+  const j=await r.json();
+  if(!j.ok){out.textContent='Error: '+j.error;return;}
+  if(!j.profiles.length){out.textContent='No profiles found';return;}
+  rtsp_url.value=j.profiles[0].uri;
+  if(j.profiles.length>1) sub_rtsp_url.value=j.profiles[j.profiles.length-1].uri;
+  out.textContent=j.profiles.map(p=>p.name+' '+p.width+'x'+p.height).join(', ');
+}
+</script>
+{% endblock %}

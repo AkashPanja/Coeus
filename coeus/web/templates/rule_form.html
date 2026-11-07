@@ -1,0 +1,32 @@
+{% extends "base.html" %}{% block title %}Rule{% endblock %}
+{% block content %}
+<h1>{{ 'Edit' if rule.id else 'Add' }} rule</h1>
+<form method="post" action="/rules/save" class="card">
+{% include "_csrf.html" %}<input type="hidden" name="id" value="{{ rule.id or '' }}">
+<div class="row"><div><label>Name</label><input type="text" name="name" value="{{ rule.name }}" required></div>
+<div><label><input type="checkbox" name="enabled" {{ 'checked' if rule.enabled }}> Enabled</label></div></div>
+<label>Event types <span class="hint">none ticked = any</span></label>
+<div class="checks">{% for t in event_types %}<label><input type="checkbox" name="event_types" value="{{ t }}" {{ 'checked' if t in rule.event_types }}>{{ t }}</label>{% endfor %}</div>
+<label>Cameras <span class="hint">none = any</span></label>
+<div class="checks">{% for c in cams %}<label><input type="checkbox" name="camera_ids" value="{{ c.id }}" {{ 'checked' if c.id in rule.camera_ids }}>{{ c.name }}</label>{% endfor %}</div>
+<label>Zones <span class="hint">none = any</span></label>
+<div class="checks">{% for z in zone_names %}<label><input type="checkbox" name="zone_names" value="{{ z }}" {{ 'checked' if z in rule.zone_names }}>{{ z }}</label>{% endfor %}</div>
+<label>People <span class="hint">none = anyone (only for face_known)</span></label>
+<div class="checks">{% for p in people %}<label><input type="checkbox" name="person_ids" value="{{ p.id }}" {{ 'checked' if p.id in rule.person_ids }}>{{ p.name }}</label>{% endfor %}</div>
+<label>Days <span class="hint">none = every day</span></label>
+<div class="checks">{% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}<label><input type="checkbox" name="days" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in rule.days }}>{{ d }}</label>{% endfor %}</div>
+<div class="row">
+<div><label>From <span class="hint">empty = all day; may cross midnight</span></label><input type="time" name="time_start" value="{{ rule.time_start }}"></div>
+<div><label>Until</label><input type="time" name="time_end" value="{{ rule.time_end }}"></div>
+<div><label>Cooldown (s)</label><input type="number" min="0" name="cooldown_s" value="{{ rule.cooldown_s }}"></div></div>
+<label>Actions (JSON) <span class="hint">Variables: {event_type} {camera} {zone} {person} {confidence} {time} {iso_time} {description} {snapshot_url} {event_id}. Put <code>llm_describe</code> first to fill {description}.</span></label>
+<p>Insert example: {% for t in ['webhook','homeassistant','homeassistant_event','llm_describe'] %}<button type="button" class="small secondary" onclick="ins('{{ t }}')">{{ t }}</button> {% endfor %}</p>
+<textarea name="actions" id="actions" rows="16">{{ actions_json }}</textarea>
+<p><button>Save</button> <a href="/rules">Cancel</a></p>
+</form>
+<script>
+const EX={{ examples_json|safe }};
+function ins(t){let a; try{a=JSON.parse(actions.value||'[]')}catch(e){alert('Fix the JSON first');return;}
+ if(t==='llm_describe') a.unshift(EX[t]); else a.push(EX[t]); actions.value=JSON.stringify(a,null,2);}
+</script>
+{% endblock %}

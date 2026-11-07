@@ -1,0 +1,25 @@
+# Synology: Container Manager -> Project -> Create, point it at a folder containing this file.
+services:
+  coeus:
+    build: .
+    image: coeus:latest
+    container_name: coeus
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    environment:
+      TZ: Asia/Kolkata
+      COEUS_TIMEZONE: Asia/Kolkata
+      COEUS_SECRET_KEY: ${COEUS_SECRET_KEY:?set a long random value in .env}
+      COEUS_ADMIN_USER: admin
+      COEUS_ADMIN_PASSWORD: ${COEUS_ADMIN_PASSWORD:-}
+      # Used to build snapshot links in notifications:
+      COEUS_PUBLIC_URL: ${COEUS_PUBLIC_URL:-http://192.168.0.111:8765}
+    volumes:
+      # Surveillance Station recordings, read-only.
+      - /volume1/surveillance:/recordings:ro
+      # Database, face photos, event snapshots, merged videos (needs ~15 GB free per camera/day).
+      - /volume1/docker/coeus:/data
+    # Optional: Intel Quick Sync for future re-encoding features.
+    # devices:
+    #   - /dev/dri:/dev/dri

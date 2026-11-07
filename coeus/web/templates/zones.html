@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% block title %}Zones · {{ cam.name }}{% endblock %}
+{% block content %}
+<h1>Zones · {{ cam.name }}</h1>
+<div class="card">
+<p class="muted">Click on the image to add points. Close a polygon with <b>Finish zone</b>. Include zones are watched; exclude zones (trees, a busy road) are ignored. With no include zone, the whole frame is watched.</p>
+<div class="zone-wrap"><img id="snap" src="/cameras/{{ cam.id }}/snapshot.jpg" alt="snapshot" onerror="this.alt='No snapshot: check the stream URL';this.style.minHeight='300px';this.style.minWidth='500px';this.style.background='#888'"><canvas id="cv"></canvas></div>
+<div class="row" style="margin-top:10px">
+  <div><label>Zone name</label><input type="text" id="zname" value="zone1"></div>
+  <div><label>Kind</label><select id="zkind"><option value="include">include</option><option value="exclude">exclude</option></select></div>
+  <div><label>Motion threshold <span class="hint">fraction of zone area</span></label><input type="number" id="zratio" step="0.005" min="0.001" max="1" value="0.01"></div>
+</div>
+<p><button type="button" onclick="finish()">Finish zone</button> <button type="button" class="secondary" onclick="undo()">Undo point</button>
+<button type="button" class="secondary" onclick="save()">Save zones</button> <span id="msg" class="muted"></span></p>
+<div id="list"></div>
+</div>
+<script>
+let zones={{ zones_json|safe }}, cur=[];
+const cv=document.getElementById('cv'), img=document.getElementById('snap'), ctx=cv.getContext('2d');
+function size(){cv.width=img.clientWidth; cv.height=img.clientHeight; draw();}
+img.addEventListener('load',size); window.addEventListener('resize',size); setTimeout(size,300);
+cv.addEventListener('click',e=>{const r=cv.getBoundingClientRect(); cur.push([(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]); draw();});
+function poly(pts,color,closed){if(!pts.length)return; ctx.beginPath(); pts.forEach(([x,y],i)=>{const X=x*cv.width,Y=y*cv.height; i?ctx.lineTo(X,Y):ctx.moveTo(X,Y);}); if(closed)ctx.closePath();
+ ctx.strokeStyle=color; ctx.lineWidth=2; ctx.stroke(); if(closed){ctx.fillStyle=color+'33'; ctx.fill();}
+ pts.forEach(([x,y])=>{ctx.fillStyle=color; ctx.fillRect(x*cv.width-3,y*cv.height-3,6,6);});}
+function draw(){ctx.clearRect(0,0,cv.width,cv.height);
+ zones.forEach(z=>{poly(z.points,z.kind==='exclude'?'#e5484d':'#30a46c',true); const [x,y]=z.points[0]; ctx.fillStyle='#fff'; ctx.font='13px sans-serif'; ctx.fillText(z.name,x*cv.width+5,y*cv.height-5);});
+ poly(cur,'#3b82f6',false); render();}
+function finish(){if(cur.length<3){alert('A zone needs at least 3 points');return;}
+ zones=zones.filter(z=>z.name!==zname.value); zones.push({name:zname.value,kind:zkind.value,points:cur,min_motion_ratio:parseFloat(zratio.value)||0.01});
+ cur=[]; zname.value='zone'+(zones.length+1); draw();}
+function undo(){cur.pop(); draw();}
+function del(i){zones.splice(i,1); draw();}
+function render(){document.getElementById('list').innerHTML=zones.map((z,i)=>`<div>${z.kind==='exclude'?'⛔':'✅'} <b>${z.name.replace(/</g,'&lt;')}</b> · ${z.points.length} points · threshold ${z.min_motion_ratio} <button class="small danger" type="button" onclick="del(${i})">remove</button></div>`).join('');}
+async function save(){const r=await fetch('/cameras/{{ cam.id }}/zones',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':document.querySelector('meta[name=csrf-token]').content},body:JSON.stringify({zones})});
+ const j=await r.json(); msg.textContent=j.ok?('Saved '+j.count+' zone(s)'):'Save failed';}
+</script>
+{% endblock %}

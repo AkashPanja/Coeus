@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% block title %}Events{% endblock %}
+{% block content %}
+<h1>Events</h1>
+<form method="get" class="card row">
+<div><label>Camera</label><select name="camera"><option value="">any</option>{% for c in cams %}<option value="{{ c.id }}" {{ 'selected' if f.camera == c.id }}>{{ c.name }}</option>{% endfor %}</select></div>
+<div><label>Person</label><select name="person"><option value="">any</option>{% for p in people %}<option value="{{ p.id }}" {{ 'selected' if f.person == p.id }}>{{ p.name }}</option>{% endfor %}</select></div>
+<div><label>Type</label><select name="type"><option value="">any</option>{% for t in event_types %}<option {{ 'selected' if f.type == t }}>{{ t }}</option>{% endfor %}</select></div>
+<div><label>Day</label><input type="date" name="day" value="{{ f.day }}"></div>
+<div><label>&nbsp;</label><button>Filter</button></div>
+</form>
+<div class="table-wrap"><table>
+<tr><th>Snapshot</th><th>Time</th><th>Camera / zone</th><th>Type</th><th>Person</th><th>Description</th><th>Actions run</th><th></th></tr>
+{% for e in events %}
+<tr><td>{% if e.snapshot_path %}<a href="/media/events/{{ e.id }}/snapshot" target="_blank"><img class="thumb" src="/media/events/{{ e.id }}/snapshot" loading="lazy" alt=""></a>{% endif %}</td>
+<td>{{ e.ts|localtime }}</td><td>{{ e.camera_name }}<br><span class="muted">{{ e.zone }}</span></td>
+<td><span class="badge {{ e.type }}">{{ e.type }}</span></td>
+<td>{% if e.face_path %}<img class="face" src="/media/events/{{ e.id }}/face" alt=""><br>{% endif %}{{ e.person_name or '—' }}{% if e.confidence %} <span class="muted">{{ '%.2f'|format(e.confidence) }}</span>{% endif %}</td>
+<td>{{ e.description }}</td>
+<td>{% for l in logs.get(e.id, []) %}<div><span class="badge {{ 'ok' if l.ok else 'failed' }}">{{ l.action_type }}</span> <span class="muted">{{ l.detail[:80] }}</span></div>{% endfor %}</td>
+<td>{% if user.is_admin %}<form method="post" action="/events/{{ e.id }}/delete">{% include "_csrf.html" %}<button class="small danger">Delete</button></form>{% endif %}</td></tr>
+{% else %}<tr><td colspan="8" class="muted">No events.</td></tr>{% endfor %}
+</table></div>
+<p>{% if page > 1 %}<a href="?camera={{ f.camera or '' }}&person={{ f.person or '' }}&type={{ f.type }}&day={{ f.day }}&page={{ page-1 }}">← Newer</a>{% endif %}
+{% if events|length == per %} <a href="?camera={{ f.camera or '' }}&person={{ f.person or '' }}&type={{ f.type }}&day={{ f.day }}&page={{ page+1 }}">Older →</a>{% endif %}</p>
+{% endblock %}

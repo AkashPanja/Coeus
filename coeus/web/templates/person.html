@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}{{ person.name }}{% endblock %}
+{% block content %}
+<h1><a href="/persons">People</a> › {{ person.name }}</h1>
+<form method="post" action="/persons/{{ person.id }}/samples" enctype="multipart/form-data" class="card">
+{% include "_csrf.html" %}
+<label>Add face photos <span class="hint">3–10 clear photos with one face each: front, slightly turned, different lighting. With and without glasses helps.</span></label>
+<input type="file" name="files" accept="image/*" multiple required>
+<p><button>Upload</button></p></form>
+<div class="grid">
+{% for s in person.samples %}
+<div class="card"><img class="thumb" src="/media/faces/{{ s.id }}" alt="">
+<form method="post" action="/persons/{{ person.id }}/samples/{{ s.id }}/delete">{% include "_csrf.html" %}<button class="small danger">Remove</button></form></div>
+{% endfor %}
+</div>
+<form method="post" action="/persons/{{ person.id }}/delete" onsubmit="return confirm('Delete {{ person.name }} and all their photos?')">{% include "_csrf.html" %}<button class="danger">Delete person</button></form>
+{% endblock %}

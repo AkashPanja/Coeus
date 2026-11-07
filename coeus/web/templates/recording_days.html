@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% block title %}{{ folder }}{% endblock %}
+{% block content %}
+<h1><a href="/recordings">Recordings</a> › {{ folder }}</h1>
+<div class="table-wrap"><table>
+<tr><th>Day</th><th>Segments</th><th>Size</th><th>First</th><th>Last</th><th>Archive</th><th></th></tr>
+{% for d in days %}{% set js = jobs.get(d.day.isoformat(), []) %}
+<tr><td>{{ d.day }}</td><td>{{ d.count }}</td><td>{{ d.size|filesize }}</td>
+<td>{{ d.first.strftime('%H:%M') }}</td><td>{{ d.last.strftime('%H:%M') }}</td>
+<td>{% for j in js|sort(attribute='part') %}<span class="badge {{ j.status }}" title="{{ j.error }}">part {{ j.part }}: {{ j.status }}</span>
+  {% if j.video_id %}<a href="https://youtu.be/{{ j.video_id }}" target="_blank">▶</a>{% endif %} {% endfor %}</td>
+<td><form method="post" action="/recordings/{{ folder|urlencode }}/{{ d.day.isoformat() }}/archive" class="inline">{% include "_csrf.html" %}
+  {% if js %}<input type="hidden" name="replan" value="1"><button class="small secondary" title="Re-plan parts that are not done">Re-plan</button>
+  {% else %}<button class="small">Merge &amp; upload</button>{% endif %}</form></td></tr>
+{% else %}<tr><td colspan="7" class="muted">No finished segments.</td></tr>{% endfor %}
+</table></div>
+{% endblock %}
