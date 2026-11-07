@@ -142,7 +142,9 @@ def fmt_ts(seconds: float) -> str:
 def write_concat_list(segs: list[PlannedSegment], list_path: Path) -> None:
     def esc(p: str) -> str:
         return p.replace("'", "'\\''")
-    list_path.write_text("".join(f"file '{esc(s.path)}'\n" for s in segs), encoding="utf-8")
+    # ffmpeg resolves relative entries against the list file's folder, so write absolute paths.
+    list_path.write_text("".join(f"file '{esc(str(Path(s.path).resolve()))}'\n" for s in segs),
+                         encoding="utf-8")
 
 
 def check_free_space(out_dir: Path, segs: list[PlannedSegment], margin: float = 1.1) -> None:

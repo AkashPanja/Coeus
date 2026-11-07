@@ -12,7 +12,9 @@ Self-hosted surveillance assistant for a Synology NAS:
   (OpenAI, Gemini, OpenRouter, local Ollama) or none.
 
 See **[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md)** for the full requirements, the
-architecture and the release plan.
+architecture and the release plan, and **[docs/TESTING.md](docs/TESTING.md)** for the
+step-by-step test plan. Coding agents (opencode and others) should start with
+**[AGENTS.md](AGENTS.md)**.
 
 ## Install on Synology (Container Manager)
 

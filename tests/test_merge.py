@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
@@ -75,3 +76,14 @@ def test_validate_skips_corrupt(recordings):
             mg.PlannedSegment(str(bad), "2025-05-16T01:30:00", 1)]
     ok, rejected = mg.validate_segments(segs)
     assert [s.path for s in ok] == [str(good)] and rejected == [str(bad)]
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg not installed")
+def test_merge_with_relative_paths(recordings, tmp_path, monkeypatch):
+    make_segment(recordings, "Main Gate", datetime(2025, 5, 16, 1, 0, 0), seconds=1)
+    monkeypatch.chdir(recordings.parent)
+    segs = scan_segments(Path("recordings"), "Main Gate", date(2025, 5, 16))
+    assert not segs[0].path.is_absolute()
+    part = mg.plan_parts(segs, mg.estimate_durations(segs), 3600)[0]
+    out = mg.merge(part.segments, Path("work/out.mp4"))  # list file lives elsewhere
+    assert mg.probe_duration(out) == pytest.approx(1, abs=0.3)
