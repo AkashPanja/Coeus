@@ -51,6 +51,9 @@ class Camera(Base):
         String(256), default="{camera} — {date} (part {part}/{parts})")
     yt_privacy: Mapped[str] = mapped_column(String(16), default="private")
     yt_playlist_id: Mapped[str] = mapped_column(String(64), default="")
+    # Playlist Coeus created for this camera, and the account it belongs to (a playlist
+    # lives on one channel, so switching accounts means a new playlist).
+    yt_playlist_account_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     yt_account_id: Mapped[int | None] = mapped_column(
         ForeignKey("youtube_accounts.id", ondelete="SET NULL"), nullable=True)
 
@@ -185,3 +188,22 @@ class ArchiveJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow,
                                                  onupdate=utcnow)
+
+
+class GateCheck(Base):
+    """One attempt to recognise someone at the gate camera (webhook, continuous or manual)."""
+    __tablename__ = "gate_checks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    trigger: Mapped[str] = mapped_column(String(16))   # webhook|continuous|manual|photo
+    outcome: Mapped[str] = mapped_column(String(16))   # opened|denied|no_match|no_face|...
+    method: Mapped[str] = mapped_column(String(16), default="")
+    person_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    person_name: Mapped[str] = mapped_column(String(128), default="")
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    source: Mapped[str] = mapped_column(String(16), default="")  # on-device|llm|both
+    snapshot_path: Mapped[str] = mapped_column(String(512), default="")
+    action_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    detail: Mapped[str] = mapped_column(Text, default="")
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    llm_calls: Mapped[int] = mapped_column(Integer, default=0)

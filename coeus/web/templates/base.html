@@ -1,39 +1,58 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>{% block title %}Coeus{% endblock %} · Coeus</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="/static/style.css">
 <meta name="csrf-token" content="{{ csrf_token(request) }}">
 </head>
 <body>
 {% if user %}
-<header>
-  <span class="brand">Coeus</span>
-  {% set p = request.url.path %}
-  <nav>
+{% set p = request.url.path %}
+<div class="shell">
+<aside class="rail">
+  <div class="brand"><span class="lens" aria-hidden="true"></span>Coeus</div>
+  <nav class="nav-group" aria-label="Watch">
+    <div class="nav-label">Watch</div>
     <a href="/" class="{{ 'active' if p == '/' }}">Dashboard</a>
+    {% if user.is_admin %}<a href="/gate" class="{{ 'active' if p.startswith('/gate') }}">Gate</a>{% endif %}
     <a href="/events" class="{{ 'active' if p.startswith('/events') }}">Events</a>
-    {% if user.is_admin %}
+  </nav>
+  {% if user.is_admin %}
+  <nav class="nav-group" aria-label="Archive">
+    <div class="nav-label">Archive</div>
+    <a href="/recordings" class="{{ 'active' if p.startswith('/recordings') or p.startswith('/library') }}">Recordings</a>
+    <a href="/jobs" class="{{ 'active' if p.startswith('/jobs') }}">Upload queue</a>
+    <a href="/youtube" class="{{ 'active' if p.startswith('/youtube') }}">YouTube accounts</a>
+  </nav>
+  <nav class="nav-group" aria-label="Setup">
+    <div class="nav-label">Setup</div>
     <a href="/cameras" class="{{ 'active' if p.startswith('/cameras') }}">Cameras</a>
-    <a href="/recordings" class="{{ 'active' if p.startswith('/recordings') }}">Recordings</a>
-    <a href="/jobs" class="{{ 'active' if p.startswith('/jobs') }}">Archive jobs</a>
-    <a href="/youtube" class="{{ 'active' if p.startswith('/youtube') }}">YouTube</a>
     <a href="/persons" class="{{ 'active' if p.startswith('/persons') }}">People</a>
     <a href="/rules" class="{{ 'active' if p.startswith('/rules') }}">Rules</a>
     <a href="/settings" class="{{ 'active' if p.startswith('/settings') }}">Settings</a>
-    {% endif %}
     <a href="/users" class="{{ 'active' if p.startswith('/users') }}">Account</a>
   </nav>
-  <form method="post" action="/logout" class="inline">
+  {% else %}
+  <nav class="nav-group" aria-label="Account"><a href="/users" class="{{ 'active' if p.startswith('/users') }}">Account</a></nav>
+  {% endif %}
+  <form method="post" action="/logout" class="rail-foot">
     <input type="hidden" name="csrf_token" value="{{ csrf_token(request) }}">
-    <span class="muted">{{ user.username }}</span> <button class="small secondary">Log out</button>
+    <span>{{ user.username }}</span><button class="small">Log out</button>
   </form>
-</header>
-{% endif %}
-<main>
-{% if flash %}<div class="flash {{ flash.kind }}">{{ flash.message }}</div>{% endif %}
+</aside>
+<main class="content"><div class="content-inner">
+{% if flash %}<div class="flash {{ flash.kind }}" role="status">{{ flash.message }}</div>{% endif %}
 {% block content %}{% endblock %}
+</div></main>
+</div>
+{% else %}
+<main class="login-wrap">
+{% if flash %}<div class="flash {{ flash.kind }}">{{ flash.message }}</div>{% endif %}
+{% block bare %}{% endblock %}
 </main>
+{% endif %}
 </body>
 </html>

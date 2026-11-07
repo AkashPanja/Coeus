@@ -46,6 +46,8 @@ class Runtime:
             load_rules=self._load_rules, on_fired=self._rule_fired,
             log_result=self._log_action, get_config=self._config, describe=self._describe)
         self._cfg_cache: tuple[float, dict] = (0.0, {})
+        from coeus.gate import GateController
+        self.gate = GateController(self)
 
     # -- config ------------------------------------------------------------------
     def _config(self) -> dict:
@@ -127,13 +129,18 @@ class Runtime:
                          for z in cam.zones]
                 out.append(CameraConfig(cam.id, cam.name, url, zones, cam.detect_fps,
                                         cam.face_mode, cam.cooldown_s))
-        return out
+            limit = max(1, int(ss.get(db, "live.max_cameras") or 1))
+        if len(out) > limit:
+            log.warning("only %d camera(s) may be watched live; ignoring %s", limit,
+                        ", ".join(c.name for c in out[limit:]))
+        return out[:limit]
 
     def sync_monitors(self) -> None:
         self.monitors.sync(self.camera_configs())
 
     # -- events ------------------------------------------------------------------
     def handle_detection(self, det: Detection) -> None:
+        self.gate.on_live_activity(det.camera.id)
         match = det.match or Match(None, "unknown", 0.0)
         event_type = det.event_type
         description = ""

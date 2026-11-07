@@ -1,6 +1,9 @@
 {% extends "base.html" %}{% block title %}Cameras{% endblock %}
 {% block content %}
-<h1>Cameras <a class="btn secondary" href="/cameras/new">Add camera</a></h1>
+<div class="page-head">
+  <div><h1>Cameras</h1><div class="sub">One camera is watched live; any number can be archived daily.</div></div>
+  <div class="actions"><a class="btn" href="/cameras/new">Add camera</a></div>
+</div>
 <div class="table-wrap"><table>
 <tr><th>Name</th><th>Live monitoring</th><th>Status</th><th>Zones</th><th>Recording folder</th><th>Archive</th><th></th></tr>
 {% for c in cams %}{% set st = statuses[c.id] %}
@@ -10,7 +13,7 @@
 <td>{% if st %}<span class="badge {{ st.state }}">{{ st.state }}</span> <span class="muted">{{ '%.1f'|format(st.fps) }} fps {{ st.error }}</span>{% else %}—{% endif %}</td>
 <td>{{ c.zones|length }} <a href="/cameras/{{ c.id }}/zones">edit</a></td>
 <td>{{ c.recording_folder or '—' }}</td>
-<td>{{ ('on · ' ~ c.yt_privacy) if c.archive_enabled else 'off' }}</td>
+<td>{{ 'daily, private' if c.archive_enabled else 'off' }}{% if c.yt_playlist_id %} · <a href="https://www.youtube.com/playlist?list={{ c.yt_playlist_id }}" target="_blank" rel="noopener">playlist</a>{% endif %}</td>
 <td><a href="/cameras/{{ c.id }}/edit">Edit</a>
 <form method="post" action="/cameras/{{ c.id }}/delete" class="inline" onsubmit="return confirm('Delete camera?')">{% include "_csrf.html" %}<button class="small danger">Delete</button></form></td>
 </tr>

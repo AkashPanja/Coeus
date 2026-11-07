@@ -1,16 +1,18 @@
 {% extends "base.html" %}{% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1>
+<div class="page-head">
+  <div><h1>Settings</h1></div>
+</div>
 
 <div class="card" id="youtube">
-<h2 style="margin-top:0">Recordings and YouTube</h2>
+<h2>Recordings and YouTube</h2>
 <p>Recordings folder: <code>{{ library_path }}</code> · <a href="/library">change</a></p>
 <p>YouTube accounts: {{ accounts|length }} · <a href="/youtube">manage accounts</a> (each camera chooses its own account)</p>
 </div>
 
-<form method="post" action="/settings">{% include "_csrf.html" %}
+<form method="post" action="/settings" class="stack">{% include "_csrf.html" %}
 <div class="card">
-<h2 style="margin-top:0">Daily archive</h2>
+<h2>Daily archive</h2>
 <div class="row">
   <div><label>Run every day at <span class="hint">({{ tz }})</span></label><input type="time" name="archive__schedule_time" value="{{ v['archive.schedule_time'] }}"></div>
   <div><label>Maximum part length (hours) <span class="hint">YouTube's limit is 12</span></label><input type="number" step="0.1" min="0.5" max="11.9" name="archive__max_part_hours" value="{{ v['archive.max_part_hours'] }}"></div>
@@ -25,16 +27,17 @@
 </div>
 
 <div class="card">
-<h2 style="margin-top:0">Face recognition</h2>
+<h2>Face recognition</h2>
 <div class="row">
   <div><label>Match threshold <span class="hint">cosine similarity; higher = stricter (0.363 recommended)</span></label><input type="number" step="0.01" min="0.1" max="0.95" name="faces__threshold" value="{{ v['faces.threshold'] }}"></div>
   <div><label>Same-person cooldown (s)</label><input type="number" min="0" name="faces__dedupe_seconds" value="{{ v['faces.dedupe_seconds'] }}"></div>
+  <div><label>Cameras watched live at once <span class="hint">1 suits a small NAS</span></label><input type="number" min="1" max="8" name="live__max_cameras" value="{{ v['live.max_cameras'] }}"></div>
   <div><label>Keep events for (days)</label><input type="number" min="1" name="events__retention_days" value="{{ v['events.retention_days'] }}"></div>
 </div>
 </div>
 
 <div class="card" id="llm">
-<h2 style="margin-top:0">LLM provider</h2>
+<h2>LLM provider</h2>
 <p class="muted">Used to describe snapshots and to help identify faces when a camera's face mode includes LLM. Cloud providers receive images from your cameras; Ollama keeps everything on your network.</p>
 <div class="row">
   <div><label>Provider</label><select name="llm__provider">
@@ -48,7 +51,7 @@
 </div>
 
 <div class="card" id="ha">
-<h2 style="margin-top:0">Home Assistant</h2>
+<h2>Home Assistant</h2>
 <div class="row">
   <div><label>URL</label><input type="text" name="ha__url" value="{{ v['ha.url'] }}" placeholder="http://192.168.0.111:8123"></div>
   <div><label>Long-lived access token <span class="hint">{{ masked['ha.token'] or 'not set' }} · “-” clears</span></label><input type="password" name="ha__token" autocomplete="off"></div>

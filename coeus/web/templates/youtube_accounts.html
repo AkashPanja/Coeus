@@ -1,6 +1,9 @@
 {% extends "base.html" %}{% block title %}YouTube accounts{% endblock %}
 {% block content %}
-<h1>YouTube accounts <a class="btn secondary" href="/youtube/new">Add account</a></h1>
+<div class="page-head">
+  <div><h1>YouTube accounts</h1><div class="sub">Each camera uploads to the account you choose for it.</div></div>
+  <div class="actions"><a class="btn" href="/youtube/new">Add account</a></div>
+</div>
 <p class="muted">Each camera uploads to the account you choose for it. Accounts that share an OAuth client (one Google Cloud project) also share that project's daily quota.</p>
 {% for a in accounts %}{% set q = quotas[a.id] %}
 <div class="card">

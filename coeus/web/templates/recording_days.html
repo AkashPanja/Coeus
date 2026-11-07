@@ -1,10 +1,12 @@
 {% extends "base.html" %}{% block title %}{{ folder }}{% endblock %}
 {% block content %}
-<h1><a href="/recordings">Recordings</a> › {{ folder }}</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/recordings">Recordings</a></div><h1>{{ folder }}</h1><div class="sub">Days found in this camera folder.</div></div>
+</div>
 <div class="table-wrap"><table>
 <tr><th>Day</th><th>Segments</th><th>Size</th><th>First</th><th>Last</th><th>Archive</th><th></th></tr>
 {% for d in days %}{% set js = jobs.get(d.day.isoformat(), []) %}
-<tr><td>{{ d.day }}</td><td>{{ d.count }}</td><td>{{ d.size|filesize }}</td>
+<tr><td class="time">{{ d.day }}</td><td>{{ d.count }}</td><td>{{ d.size|filesize }}</td>
 <td>{{ d.first.strftime('%H:%M') }}</td><td>{{ d.last.strftime('%H:%M') }}</td>
 <td>{% for j in js|sort(attribute='part') %}<span class="badge {{ j.status }}" title="{{ j.error }}">part {{ j.part }}: {{ j.status }}</span>
   {% if j.video_id %}<a href="https://youtu.be/{{ j.video_id }}" target="_blank">▶</a>{% endif %} {% endfor %}</td>

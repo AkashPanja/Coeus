@@ -230,3 +230,16 @@ def test_credentials(credentials_info: dict | None,
     return {"ok": True, "detail": f"Connected to channel “{ch['snippet']['title']}”; "
                                   "upload permission granted.",
             "channel_title": ch["snippet"]["title"], "channel_id": ch["id"]}
+
+
+def create_playlist(service, title: str, description: str = "") -> str:
+    """Create a private playlist and return its id (costs 50 quota units)."""
+    resp = service.playlists().insert(part="snippet,status", body={
+        "snippet": {"title": title[:150], "description": description[:5000]},
+        "status": {"privacyStatus": "private"}}).execute()
+    return resp["id"]
+
+
+def playlist_exists(service, playlist_id: str) -> bool:
+    resp = service.playlists().list(part="id", id=playlist_id, maxResults=1).execute()
+    return bool(resp.get("items"))

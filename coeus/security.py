@@ -95,6 +95,8 @@ def csrf_token(request: Request) -> str:
 async def verify_csrf(request: Request) -> None:
     if request.method in ("GET", "HEAD", "OPTIONS"):
         return
+    if request.url.path.startswith("/api/hooks/"):
+        return  # machine-to-machine; authenticated by the secret token in the URL
     expected = request.session.get("csrf", "")
     sent = request.headers.get("x-csrf-token", "")
     if not sent:

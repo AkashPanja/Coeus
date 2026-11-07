@@ -197,3 +197,52 @@ def test_archive_queue_from_recordings(client, settings):
     r = client.post("/recordings/Main Gate/2025-05-16/archive", data={"csrf_token": tok})
     assert r.status_code == 200 and "Queued 1 part(s)" in r.text
     assert "Main Gate" in client.get("/jobs").text
+
+
+def test_gate_webhook(client, monkeypatch):
+    app = client.app
+    ctl = app.state.runtime.gate
+    cfg = ctl.config()
+    assert client.post(f"/api/hooks/gate/wrong").status_code == 404
+    r = client.post(f"/api/hooks/gate/{cfg.token}")
+    assert r.status_code == 409  # gate off
+    cfg.enabled, cfg.camera_id = True, 1
+    ctl.save(cfg)
+    monkeypatch.setattr(ctl, "check", lambda trigger, window_s=None: {"outcome": "opened",
+                                                                     "trigger": trigger})
+    r = client.get(f"/api/hooks/gate/{cfg.token}")  # no login, no CSRF
+    assert r.json() == {"outcome": "opened", "trigger": "webhook"}
+    cfg.mode = "continuous"
+    ctl.save(cfg)
+    assert client.post(f"/api/hooks/gate/{cfg.token}").status_code == 409
+
+
+def test_gate_page_save(client):
+    login(client)
+    tok = csrf(client, "/gate")
+    tok = csrf(client, "/cameras/new")
+    client.post("/cameras/save", data={"csrf_token": tok, **CAM, "archive_enabled": ""})
+    r = client.post("/gate/save", data={
+        "csrf_token": tok, "enabled": "on", "camera_id": "1", "mode": "webhook",
+        "method": "local+llm", "llm_min_confidence": "0.8", "window_s": "10",
+        "action": '{"type": "homeassistant", "service": "cover.open_cover", '
+                  '"data": {"entity_id": "cover.gate"}}'})
+    assert "none is set up" in r.text  # LLM method chosen but no provider
+    cfg = client.app.state.runtime.gate.config()
+    assert cfg.enabled and cfg.method == "local+llm" and cfg.action["service"] == "cover.open_cover"
+    assert "/api/hooks/gate/" + cfg.token in client.get("/gate").text
+    r = client.post("/gate/save", data={"csrf_token": tok, "action": "[1]"})
+    assert "Gate action" in r.text
+
+
+def test_only_one_camera_watched_live(client):
+    login(client)
+    tok = csrf(client, "/cameras/new")
+    base = {**CAM, "archive_enabled": "", "monitor_enabled": "on", "rtsp_url": "rtsp://x/1"}
+    client.post("/cameras/save", data={"csrf_token": tok, **base})
+    r = client.post("/cameras/save", data={"csrf_token": tok, **base, "name": "Main Road"})
+    assert "Live watching moved from Main Gate to Main Road" in r.text
+    from coeus.db import session_scope
+    from coeus.models import Camera
+    with session_scope() as db:
+        assert [c.name for c in db.query(Camera).filter(Camera.monitor_enabled)] == ["Main Road"]

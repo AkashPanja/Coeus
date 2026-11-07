@@ -20,6 +20,10 @@ DEFAULTS: dict[str, Any] = {
     # YouTube (accounts live in their own table; quota state is keyed by OAuth client id)
     "youtube.category_id": "22",
     "youtube.quota": {},  # {client_id: {"date": ..., "count": n, "blocked_until": iso}}
+    # Live watching: how many cameras may be analysed continuously (NAS CPU budget)
+    "live.max_cameras": 1,
+    # Gate: one camera that opens a gate for allowed people (see coeus/gate.py)
+    "gate": {},
     # Face recognition
     "faces.threshold": 0.363,
     "faces.dedupe_seconds": 60,

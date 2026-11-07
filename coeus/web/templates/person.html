@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}{{ person.name }}{% endblock %}
 {% block content %}
-<h1><a href="/persons">People</a> › {{ person.name }}</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/persons">People</a></div><h1>{{ person.name }}</h1><div class="sub">{{ person.samples|length }} face photo(s)</div></div>
+</div>
 <form method="post" action="/persons/{{ person.id }}/samples" enctype="multipart/form-data" class="card">
 {% include "_csrf.html" %}
 <label>Add face photos <span class="hint">3–10 clear photos with one face each: front, slightly turned, different lighting. With and without glasses helps.</span></label>

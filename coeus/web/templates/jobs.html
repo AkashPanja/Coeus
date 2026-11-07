@@ -1,12 +1,14 @@
 {% extends "base.html" %}{% block title %}Archive jobs{% endblock %}
 {% block content %}
-<h1>Archive jobs
-<form method="post" action="/jobs/run" class="inline">{% include "_csrf.html" %}<button class="small secondary">Run worker now</button></form></h1>
+<div class="page-head">
+  <div><h1>Upload queue</h1><div class="sub">Merged parts waiting for YouTube, oldest day first.</div></div>
+  <div class="actions"><form method="post" action="/jobs/run" class="inline">{% include "_csrf.html" %}<button class="secondary">Process queue now</button></form></div>
+</div>
 <p class="muted">Uploads today: {% for a in accounts %}{% set q = quotas[a.id] %}{{ a.name }} {{ q[1] }}/{{ q[2] }}{% if q[0] %} (quota exhausted until midnight Pacific){% endif %}{{ ' · ' if not loop.last }}{% else %}no YouTube accounts — <a href="/youtube/new">add one</a>{% endfor %}</p>
 <div class="table-wrap"><table>
 <tr><th>Day</th><th>Camera folder</th><th>Part</th><th>Length</th><th>Segments</th><th>Status</th><th>Video</th><th>Detail</th><th></th></tr>
 {% for j in jobs %}
-<tr><td>{{ j.day }}</td><td>{{ j.camera_folder }}</td><td>{{ j.part }}/{{ j.parts }}</td><td>{{ j.duration_s|duration }}</td>
+<tr><td class="time">{{ j.day }}</td><td>{{ j.camera_folder }}</td><td>{{ j.part }}/{{ j.parts }}</td><td>{{ j.duration_s|duration }}</td>
 <td>{{ j.segments|length }}</td><td><span class="badge {{ j.status }}">{{ j.status }}</span></td>
 <td>{% if j.video_id %}<a href="https://youtu.be/{{ j.video_id }}" target="_blank">{{ j.video_id }}</a>{% endif %}</td>
 <td class="muted" style="max-width:320px">{{ j.error }}</td>

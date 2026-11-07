@@ -1,14 +1,12 @@
 {% extends "base.html" %}{% block title %}Log in{% endblock %}
-{% block content %}
-<div class="login card">
-  <h1>Coeus</h1>
+{% block bare %}
+<form method="post" action="/login" class="card login">
+  <div class="brand"><span class="lens" aria-hidden="true"></span>Coeus</div>
   {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
-  <form method="post" action="/login">
-    {% include "_csrf.html" %}
-    <input type="hidden" name="next" value="{{ next }}">
-    <label>Username</label><input type="text" name="username" autocomplete="username" required autofocus>
-    <label>Password</label><input type="password" name="password" autocomplete="current-password" required>
-    <p><button>Log in</button></p>
-  </form>
-</div>
+  {% include "_csrf.html" %}
+  <input type="hidden" name="next" value="{{ next }}">
+  <label for="username">Username</label><input type="text" id="username" name="username" autocomplete="username" required autofocus>
+  <label for="password">Password</label><input type="password" id="password" name="password" autocomplete="current-password" required>
+  <div class="form-foot"><button>Log in</button></div>
+</form>
 {% endblock %}

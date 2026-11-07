@@ -1,6 +1,9 @@
 {% extends "base.html" %}{% block title %}Rules{% endblock %}
 {% block content %}
-<h1>Rules <a class="btn secondary" href="/rules/new">Add rule</a></h1>
+<div class="page-head">
+  <div><h1>Rules</h1><div class="sub">What happens when the live camera sees motion or a face.</div></div>
+  <div class="actions"><a class="btn" href="/rules/new">Add rule</a></div>
+</div>
 <div class="table-wrap"><table>
 <tr><th>Name</th><th>When</th><th>Where</th><th>Who</th><th>Actions</th><th>Last fired</th><th></th></tr>
 {% for r in rules %}

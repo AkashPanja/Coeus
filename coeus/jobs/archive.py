@@ -192,7 +192,9 @@ def upload_job(settings: Settings, job_id: int) -> bool:
                                 end=end.strftime("%H:%M") if end else "")
         desc = yt.build_description(camera_name, job.day, job.part, job.parts,
                                     mg.chapters(segs), gaps, mg.fmt_ts)
-        privacy, playlist = cam.yt_privacy, cam.yt_playlist_id
+        privacy = "private"  # archives are always private
+        cam_id = cam.id
+        playlist = cam.yt_playlist_id if cam.yt_playlist_account_id == account_id else ""
         resume_uri, output = job.upload_session_uri, Path(job.output_path)
         job.status, job.error = "uploading", ""
 
@@ -208,14 +210,18 @@ def upload_job(settings: Settings, job_id: int) -> bool:
         service = yt.build_service(creds, save_creds)
         video_id = yt.upload_video(service, output, title, desc, privacy, category, resume_uri,
                                    on_session=lambda uri: _set(job_id, upload_session_uri=uri))
-        if playlist:
-            try:
-                yt.add_to_playlist(service, playlist, video_id)
-            except Exception as err:  # noqa: BLE001
-                log.warning("playlist insert failed: %s", err)
-        _set(job_id, status="done", video_id=video_id, upload_session_uri="", error="")
+        note, quota_hit = "", False
+        try:
+            add_to_camera_playlist(service, cam_id, account_id, camera_name, playlist, video_id)
+        except yt.QuotaExceeded:
+            # The video is already up: never fall through to the re-upload path.
+            note, quota_hit = "uploaded; not added to the playlist (quota ran out)", True
+        except Exception as err:  # noqa: BLE001
+            log.warning("playlist step failed: %s", err)
+            note = f"uploaded, but adding to the playlist failed: {err}"[:500]
+        _set(job_id, status="done", video_id=video_id, upload_session_uri="", error=note)
         with session_scope() as db:
-            _update_quota(db, client_id, bump=True)
+            _update_quota(db, client_id, bump=True, block=quota_hit)
         if keep == "delete":
             output.unlink(missing_ok=True)
         return True
@@ -232,6 +238,35 @@ def upload_job(settings: Settings, job_id: int) -> bool:
         log.exception("upload failed for job %s", job_id)
         _set(job_id, status="failed", error=f"upload: {err}")
         return True
+
+
+def add_to_camera_playlist(service, cam_id: int, account_id: int, camera_name: str,
+                           playlist: str, video_id: str) -> str:
+    """Put the video in the camera's own private playlist, creating it the first time."""
+    from googleapiclient.errors import HttpError
+
+    def make() -> str:
+        pid = yt.create_playlist(service, f"{camera_name} — Coeus archive",
+                                 f"Daily recordings from the {camera_name} camera.")
+        with session_scope() as db:
+            c = db.get(Camera, cam_id)
+            if c:
+                c.yt_playlist_id, c.yt_playlist_account_id = pid, account_id
+        return pid
+
+    if not playlist:
+        playlist = make()
+    try:
+        yt.add_to_playlist(service, playlist, video_id)
+    except HttpError as err:
+        if err.resp.status == 404:  # deleted on YouTube: make a fresh one
+            playlist = make()
+            yt.add_to_playlist(service, playlist, video_id)
+        elif err.resp.status == 403 and yt._is_quota_error(err):
+            raise yt.QuotaExceeded(str(err)) from err
+        else:
+            raise
+    return playlist
 
 
 def _next_job(db: Session, status: str) -> int | None:
@@ -263,7 +298,8 @@ def run_worker(settings: Settings) -> None:
                 break
             merge_job(settings, job_id)
             with session_scope() as db:
-                merged = db.get(ArchiveJob, job_id).status == "merged"
+                job = db.get(ArchiveJob, job_id)  # may have been removed meanwhile
+                merged = job is not None and job.status == "merged"
             if merged:
                 upload_job(settings, job_id)  # right away, so merged files don't pile up
     finally:

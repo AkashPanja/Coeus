@@ -121,3 +121,46 @@ def test_camera_without_account_is_skipped(planned, db, settings):
     jobs = db.scalars(select(ArchiveJob)).all()
     assert {j.status for j in jobs} == {"pending"}
     assert "no YouTube account" in jobs[0].error
+
+
+class FakeYT:
+    """Stands in for the YouTube API client in playlist tests."""
+    def __init__(self):
+        self.playlists, self.items = [], []
+
+
+def test_each_camera_gets_its_own_private_playlist(planned, db, settings, monkeypatch):
+    api = FakeYT()
+    monkeypatch.setattr(yt, "build_service", lambda creds, cb=None: api)
+    privacy = []
+    monkeypatch.setattr(yt, "upload_video", lambda service, path, title, desc, priv, *a, **k:
+                        privacy.append(priv) or f"v{len(privacy)}")
+    monkeypatch.setattr(yt, "create_playlist", lambda service, title, desc="":
+                        api.playlists.append(title) or f"PL{len(api.playlists)}")
+    monkeypatch.setattr(yt, "add_to_playlist", lambda service, pl, vid: api.items.append((pl, vid)))
+    cam = db.scalar(select(Camera))
+    cam.yt_privacy = "public"  # ignored: archives are always private
+    db.commit()
+    archive.run_worker(settings)
+    db.expire_all()
+    cam = db.scalar(select(Camera))
+    assert privacy == ["private", "private"]
+    assert api.playlists == ["Main Gate — Coeus archive"]  # created once, then reused
+    assert api.items == [("PL1", "v1"), ("PL1", "v2")]
+    assert cam.yt_playlist_id == "PL1" and cam.yt_playlist_account_id == cam.yt_account_id
+
+
+def test_playlist_quota_error_does_not_reupload(planned, db, settings, monkeypatch):
+    monkeypatch.setattr(yt, "build_service", lambda creds, cb=None: object())
+    uploads = []
+    monkeypatch.setattr(yt, "upload_video", lambda *a, **k: uploads.append(1) or "v1")
+
+    def no_quota(*a, **k):
+        raise yt.QuotaExceeded("quota")
+
+    monkeypatch.setattr(yt, "create_playlist", no_quota)
+    archive.run_worker(settings)
+    db.expire_all()
+    jobs = db.scalars(select(ArchiveJob).order_by(ArchiveJob.part)).all()
+    assert uploads == [1] and jobs[0].status == "done" and "playlist" in jobs[0].error
+    assert jobs[1].status == "pending"  # quota is out: stop for today

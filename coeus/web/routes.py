@@ -106,7 +106,14 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
         disk = shutil.disk_usage(s.data_dir)
     except OSError:
         pass
+    from coeus.models import GateCheck
+    gate_cfg = runtime.gate.config()
+    live = next((c for c in cams if c.monitor_enabled), None)
     return render(request, "dashboard.html", cams=cams, statuses=statuses, events=events,
+                  gate_cfg=gate_cfg, live=live,
+                  gate_cam=db.get(Camera, gate_cfg.camera_id) if gate_cfg.camera_id else None,
+                  gate_checks=db.scalars(select(GateCheck).order_by(GateCheck.ts.desc())
+                                         .limit(6)).all(),
                   job_counts=job_counts, accounts=accounts, quotas=quotas, disk=disk,
                   people=db.scalar(select(func.count()).select_from(Person)))
 
@@ -114,8 +121,7 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
 # --- Cameras ------------------------------------------------------------------
 
 CAMERA_FIELDS = ("name", "rtsp_url", "sub_rtsp_url", "onvif_host", "onvif_user",
-                 "recording_folder", "yt_title_template", "yt_privacy", "yt_playlist_id",
-                 "face_mode")
+                 "recording_folder", "yt_title_template", "face_mode")
 
 
 @router.get("/cameras")
@@ -169,10 +175,19 @@ async def camera_save(request: Request, user: User = Depends(admin_user),
     if not cam.name:
         flash(request, "Name is required", "error")
         return redirect("/cameras/new")
-    if cam.yt_privacy not in ("private", "unlisted", "public"):
-        cam.yt_privacy = "private"
+    cam.yt_privacy = "private"  # archives are always private
     if not cam_id:
         db.add(cam)
+    switched = ""
+    if cam.monitor_enabled:
+        db.flush()
+        others = [c for c in db.scalars(select(Camera).where(Camera.monitor_enabled.is_(True),
+                                                             Camera.id != cam.id))]
+        limit = max(1, int(ss.get(db, "live.max_cameras") or 1))
+        while len(others) >= limit:
+            off = others.pop(0)
+            off.monitor_enabled = False
+            switched += f" Live watching moved from {off.name} to {cam.name} (limit: {limit})."
     problem, next_url = "", "/cameras"
     if cam.archive_enabled and not cam.recording_folder:
         cam.archive_enabled, problem = False, "Choose a recording folder to archive this camera."
@@ -189,7 +204,8 @@ async def camera_save(request: Request, user: User = Depends(admin_user),
                     and "no YouTube account" in problem else f"/cameras/{cam.id}/edit")
     db.commit()
     rt(request).sync_monitors()
-    flash(request, problem or f"Saved camera {cam.name}", "error" if problem else "ok")
+    flash(request, (problem or f"Saved camera {cam.name}.") + switched,
+          "error" if problem else "ok")
     return redirect(next_url)
 
 
@@ -702,7 +718,7 @@ EDITABLE = {
     "youtube.category_id": str,
     "faces.threshold": float, "faces.dedupe_seconds": float,
     "llm.provider": str, "llm.model": str, "llm.base_url": str, "llm.max_calls_per_hour": int,
-    "ha.url": str, "events.retention_days": int,
+    "ha.url": str, "events.retention_days": int, "live.max_cameras": int,
 }
 SECRET_FIELDS = ("llm.api_key", "ha.token")
 
@@ -755,6 +771,7 @@ async def settings_save(request: Request, user: User = Depends(admin_user),
         from coeus.jobs.scheduler import reschedule_daily
         reschedule_daily(sched, at)
     rt(request).invalidate_config()
+    rt(request).sync_monitors()
     flash(request, "Settings saved")
     return redirect("/settings")
 

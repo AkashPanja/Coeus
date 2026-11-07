@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Events{% endblock %}
 {% block content %}
-<h1>Events</h1>
+<div class="page-head">
+  <div><h1>Events</h1><div class="sub">Motion and faces seen by the live camera.</div></div>
+</div>
 <form method="get" class="card row">
 <div><label>Camera</label><select name="camera"><option value="">any</option>{% for c in cams %}<option value="{{ c.id }}" {{ 'selected' if f.camera == c.id }}>{{ c.name }}</option>{% endfor %}</select></div>
 <div><label>Person</label><select name="person"><option value="">any</option>{% for p in people %}<option value="{{ p.id }}" {{ 'selected' if f.person == p.id }}>{{ p.name }}</option>{% endfor %}</select></div>
@@ -12,7 +14,7 @@
 <tr><th>Snapshot</th><th>Time</th><th>Camera / zone</th><th>Type</th><th>Person</th><th>Description</th><th>Actions run</th><th></th></tr>
 {% for e in events %}
 <tr><td>{% if e.snapshot_path %}<a href="/media/events/{{ e.id }}/snapshot" target="_blank"><img class="thumb" src="/media/events/{{ e.id }}/snapshot" loading="lazy" alt=""></a>{% endif %}</td>
-<td>{{ e.ts|localtime }}</td><td>{{ e.camera_name }}<br><span class="muted">{{ e.zone }}</span></td>
+<td class="time">{{ e.ts|localtime }}</td><td>{{ e.camera_name }}<br><span class="muted">{{ e.zone }}</span></td>
 <td><span class="badge {{ e.type }}">{{ e.type }}</span></td>
 <td>{% if e.face_path %}<img class="face" src="/media/events/{{ e.id }}/face" alt=""><br>{% endif %}{{ e.person_name or '—' }}{% if e.confidence %} <span class="muted">{{ '%.2f'|format(e.confidence) }}</span>{% endif %}</td>
 <td>{{ e.description }}</td>

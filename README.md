@@ -48,8 +48,25 @@ space as one part's segments, about 6 GB per 12-hour part.
    stream**. Use the sub-stream for detection, turn on **Monitor this camera live**,
    then **edit zones** on the snapshot.
 5. **People.** Add each person with 3–10 clear face photos.
-6. **Rules.** Choose event types, cameras, zones, people, a time window and actions.
+6. **Gate.** Choose the gate camera, who may open it, the recognition method
+   (on-device, LLM with confidence, or both) and the Home Assistant action that opens
+   the gate. Call the webhook address shown on the page from a doorbell or an
+   automation, or let the live camera check all the time.
+7. **Rules.** Choose event types, cameras, zones, people, a time window and actions.
    Use **Test** to send a fake event.
+
+### Gate webhook from Home Assistant
+
+```yaml
+rest_command:
+  coeus_gate_check:
+    url: "http://192.168.0.111:8765/api/hooks/gate/<token from the Gate page>"
+    method: post
+    timeout: 30
+```
+
+The response is JSON, for example
+`{"outcome": "opened", "person": "Akash", "confidence": 0.82, "source": "on-device"}`.
 
 ### Action examples
 
@@ -75,8 +92,9 @@ space as one part's segments, about 6 GB per 12-hour part.
   about 6 uploads. Quota is tracked per project, so accounts on different projects
   upload independently. Coeus keeps a queue, holds back a project when its quota runs
   out, and continues after the reset at midnight Pacific time.
-* **Privacy.** Uploads from unverified API projects are locked to *private*. Private
-  is the default for each camera anyway.
+* **Privacy and playlists.** Archives are always uploaded as *private*, and each
+  camera gets its own private playlist on its YouTube account, created on the first
+  upload.
 
 ## Development
 
@@ -100,6 +118,7 @@ Code map:
 | `coeus/vision/` | Zone masks and MOG2 motion, YuNet/SFace faces, ONVIF, per-camera monitor threads |
 | `coeus/llm/providers.py` | Claude and OpenAI-compatible vision providers |
 | `coeus/actions/engine.py` | Rule matching, webhook and Home Assistant actions |
+| `coeus/gate.py` | Gate opener: webhook/continuous checks, on-device + LLM decision |
 | `coeus/web/` | FastAPI routes (`routes_youtube.py`: accounts and library picker) and Jinja templates |
 
 The face models (YuNet and SFace from the OpenCV model zoo, about 38 MB) are downloaded

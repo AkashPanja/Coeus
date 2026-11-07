@@ -142,8 +142,13 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
   upload costs about 1,600, so only about 6 uploads fit in a day. Coeus keeps a
   priority queue, stops when it gets `quotaExceeded`, and continues after the
   quota resets at midnight Pacific time. The dashboard shows the backlog.
-* FR-Y6: Optionally add each video to a playlist per camera (P2: create the
-  playlist if it is missing).
+* FR-Y6: **Each camera has its own private playlist**, named
+  "<camera> — Coeus archive". It is created on the first upload, on the account
+  the camera uses, and reused after that. If it is deleted on YouTube, or the
+  camera moves to another account, a new one is made. If the quota runs out after
+  a video is uploaded but before it is added to the playlist, the video is not
+  uploaded again.
+* FR-Y6a: **Archives are always private.** There is no privacy option per camera.
 * FR-Y7: Save every job with its status (pending, merging, uploading, done,
   failed), log, YouTube video ID and link. Jobs are idempotent: one row per
   camera, day and part. A part that is already done is never uploaded again.
@@ -190,6 +195,9 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
   motion area, and a cooldown between events.
 * FR-Z4: Zones can be *include* zones (only watch here) or *exclude* zones (for
   example trees or a road).
+* FR-Z4a: **Only one camera is watched live at a time** by default, to fit a small
+  or custom NAS. The limit is a setting (`live.max_cameras`). Turning live watching
+  on for a camera moves it from the previous one and says so.
 * FR-Z5 (P2): Person and vehicle detection (YOLO ONNX), so leaves and shadows
   do not cause false alarms.
 
@@ -254,6 +262,35 @@ Assumption: "detect factory in it" in the brief means **detect faces in it**.
 * FR-E4: Every action run is saved with its status code and any error. Failed
   actions are retried up to 3 times.
 * FR-E5: The user can test a rule from the UI by firing a fake event.
+
+### 3.10a Gate opener (P1)
+
+* FR-G1: One gate, one camera. The Gate page sets the camera, who may open the
+  gate (people from the People list, or everyone), the recognition method, the
+  watch window, the cooldown and the gate action (a Home Assistant service such as
+  `switch.turn_on` or `cover.open_cover`, or a webhook).
+* FR-G2: **Two ways to trigger a check**, chosen by the user:
+  * *Webhook*: a secret URL `/api/hooks/gate/<token>` (GET or POST, no login).
+    Calling it, for example from a doorbell or a Home Assistant automation, makes
+    Coeus watch the camera for up to the window (default 15 s) and answer with the
+    result as JSON. `?wait=false` returns 202 at once. The token can be replaced.
+  * *Continuous*: the gate camera is the live camera, and any motion or face on it
+    starts a short check.
+  * *Both*.
+* FR-G3: Recognition methods:
+  * on-device face match;
+  * **LLM**: send the face close-up or the whole picture with reference photos
+    from People; the LLM returns a name from that list and a confidence, which must
+    reach a minimum (default 0.75);
+  * on-device first, then the LLM if the face is not recognised;
+  * both must agree on the same person (strictest).
+
+  LLM calls per check are capped (default 3).
+* FR-G4: Every check is logged with its trigger, outcome (opened, not allowed,
+  not recognised, no face, cooldown, error), person, confidence, which method
+  decided, picture, LLM calls used and duration.
+* FR-G5: Buttons to run a check now, to test the gate action alone, and to try a
+  photo (on-device and LLM result, nothing opens).
 
 ### 3.11 Events (P1)
 

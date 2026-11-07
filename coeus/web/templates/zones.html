@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Zones · {{ cam.name }}{% endblock %}
 {% block content %}
-<h1>Zones · {{ cam.name }}</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/cameras/{{ cam.id }}/edit">{{ cam.name }}</a></div><h1>Zones</h1><div class="sub">{{ cam.name }}</div></div>
+</div>
 <div class="card">
 <p class="muted">Click on the image to add points. Close a polygon with <b>Finish zone</b>. Include zones are watched; exclude zones (trees, a busy road) are ignored. With no include zone, the whole frame is watched.</p>
 <div class="zone-wrap"><img id="snap" src="/cameras/{{ cam.id }}/snapshot.jpg" alt="snapshot" onerror="this.alt='No snapshot: check the stream URL';this.style.minHeight='300px';this.style.minWidth='500px';this.style.background='#888'"><canvas id="cv"></canvas></div>

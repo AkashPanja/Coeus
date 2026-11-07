@@ -1,41 +1,58 @@
 {% extends "base.html" %}{% block title %}Dashboard{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
-<div class="grid">
-  <div class="card"><div class="muted">Cameras watched</div><div class="stat">{{ cams|selectattr('monitor_enabled')|list|length }} / {{ cams|length }}</div></div>
-  <div class="card"><div class="muted">Known people</div><div class="stat">{{ people }}</div></div>
-  <div class="card"><div class="muted">Archive queue</div><div class="stat">{{ (job_counts.get('pending',0) + job_counts.get('merged',0)) }}</div>
-    <div class="muted">{{ job_counts.get('done',0) }} done · {{ job_counts.get('failed',0) }} failed</div></div>
-  <div class="card"><div class="muted">YouTube accounts</div>
-    {% for a in accounts %}{% set q = quotas[a.id] %}<div>{{ a.name }}: <b>{{ q[1] }}/{{ q[2] }}</b> today
-      {% if not a.connected %}<span class="badge failed">not connected</span>{% elif q[0] %}<span class="badge failed">quota</span>{% endif %}</div>
+<div class="page-head"><div><h1>Dashboard</h1><div class="sub">{{ cams|length }} cameras · {{ people }} known people</div></div></div>
+
+<div class="stats">
+  <div class="stat-card"><span class="eyebrow">Upload queue</span><span class="stat">{{ job_counts.get('pending',0) + job_counts.get('merged',0) }}</span>
+    <span class="muted">{{ job_counts.get('done',0) }} uploaded · {{ job_counts.get('failed',0) }} failed</span></div>
+  <div class="stat-card"><span class="eyebrow">YouTube today</span>
+    {% for a in accounts %}{% set q = quotas[a.id] %}<span><b class="num">{{ q[1] }}/{{ q[2] }}</b> {{ a.name }}
+      {% if not a.connected %}<span class="badge failed">not connected</span>{% elif q[0] %}<span class="badge failed">quota used up</span>{% endif %}</span>
     {% else %}<a href="/youtube/new">Add a YouTube account</a>{% endfor %}</div>
-  {% if disk %}<div class="card"><div class="muted">Free space on /data</div><div class="stat">{{ disk.free|filesize }}</div><div class="muted">of {{ disk.total|filesize }}</div></div>{% endif %}
+  <div class="stat-card"><span class="eyebrow">Gate</span>
+    {% if gate_cfg.enabled %}<span class="stat" style="font-size:20px">{{ gate_cam.name if gate_cam }}</span><span class="muted">{{ {'webhook':'on webhook call','continuous':'checking all the time','both':'webhook and live'}[gate_cfg.mode] }}</span>
+    {% else %}<span class="muted">Off · <a href="/gate">set up</a></span>{% endif %}</div>
+  {% if disk %}<div class="stat-card"><span class="eyebrow">Free space for merging</span><span class="stat">{{ disk.free|filesize }}</span><span class="muted">of {{ disk.total|filesize }}</span></div>{% endif %}
 </div>
 
-<h2>Cameras</h2>
-<div class="grid">
-{% for c in cams %}
+<div class="split">
   <div class="card">
-    <strong>{{ c.name }}</strong>
-    {% set st = statuses[c.id] %}
-    <span class="badge {{ st.state if st else '' }}">{{ st.state if st else ('off' if not c.monitor_enabled else 'stopped') }}</span>
-    {% if st and st.error %}<div class="muted">{{ st.error }}</div>{% endif %}
-    {% if st and st.state == 'online' %}<img class="thumb" style="width:100%;margin-top:8px" src="/cameras/{{ c.id }}/snapshot.jpg" loading="lazy" alt="">{% endif %}
-    <div class="muted">{% if c.archive_enabled %}Archiving “{{ c.recording_folder }}”{% else %}Not archived{% endif %}</div>
+    <div class="section-title" style="margin:0 0 10px"><h2>Live camera</h2>
+      {% if live %}{% set st = statuses[live.id] %}<span class="badge {{ 'live' if st and st.state == 'online' else (st.state if st else '') }}">{{ 'LIVE' if st and st.state == 'online' else (st.state if st else 'starting') }}</span>{% endif %}</div>
+    {% if live %}{% set st = statuses[live.id] %}
+      {% if st and st.state == 'online' %}<img class="cam-frame" src="/cameras/{{ live.id }}/snapshot.jpg" alt="Latest picture from {{ live.name }}">
+      {% else %}<div class="cam-frame" style="display:grid;place-items:center;color:var(--muted)">{{ st.error if st and st.error else 'Connecting…' }}</div>{% endif %}
+      <p class="muted" style="margin:8px 0 0">{{ live.name }}{% if st %} · <span class="num">{{ '%.1f'|format(st.fps) }}</span> fps analysed{% endif %} · <a href="/cameras/{{ live.id }}/zones">zones</a></p>
+    {% else %}<p class="muted">No camera is watched live. Tick “Watch this camera live” on one <a href="/cameras">camera</a>.</p>{% endif %}
   </div>
-{% else %}
-  <div class="card">No cameras yet. <a href="/recordings">Import from recordings</a> or <a href="/cameras/new">add one</a>.</div>
-{% endfor %}
+  <div class="card">
+    <div class="section-title" style="margin:0 0 10px"><h2>Gate checks</h2><a href="/gate">all</a></div>
+    {% for c in gate_checks %}
+      <div style="display:flex;gap:10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)">
+        <span class="badge {{ c.outcome }}">{{ c.outcome.replace('_',' ') }}</span><span>{{ c.person_name or '—' }}</span>
+        <span class="muted mono" style="margin-left:auto">{{ c.ts|localtime('%d %b %H:%M') }}</span></div>
+    {% else %}<p class="muted">None yet.</p>{% endfor %}
+  </div>
 </div>
 
-<h2>Recent events</h2>
+<div class="section-title"><h2>Cameras</h2><a href="/cameras">manage</a></div>
+<div class="table-wrap"><table>
+<tr><th>Camera</th><th>Live</th><th>Daily archive</th><th>Playlist</th></tr>
+{% for c in cams %}{% set st = statuses[c.id] %}
+<tr><td><a href="/cameras/{{ c.id }}/edit">{{ c.name }}</a></td>
+<td>{% if c.monitor_enabled %}<span class="badge {{ 'live' if st and st.state == 'online' else (st.state if st else '') }}">{{ 'LIVE' if st and st.state == 'online' else (st.state if st else 'starting') }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+<td>{% if c.archive_enabled %}<span class="badge ok">daily</span> <span class="muted">{{ c.recording_folder }}</span>{% else %}<span class="muted">off</span>{% endif %}</td>
+<td>{% if c.yt_playlist_id %}<a href="https://www.youtube.com/playlist?list={{ c.yt_playlist_id }}" target="_blank" rel="noopener">open</a>{% else %}<span class="muted">on first upload</span>{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="muted">No cameras yet. <a href="/recordings">Add them from your recordings</a>.</td></tr>{% endfor %}
+</table></div>
+
+<div class="section-title"><h2>Recent events</h2><a href="/events">all</a></div>
 <div class="table-wrap"><table>
 <tr><th>Time</th><th>Camera</th><th>Zone</th><th>Type</th><th>Person</th><th></th></tr>
 {% for e in events %}
-<tr><td>{{ e.ts|localtime }}</td><td>{{ e.camera_name }}</td><td>{{ e.zone }}</td>
-<td><span class="badge {{ e.type }}">{{ e.type }}</span></td><td>{{ e.person_name or '—' }}</td>
-<td>{% if e.snapshot_path %}<a href="/media/events/{{ e.id }}/snapshot" target="_blank">snapshot</a>{% endif %}</td></tr>
+<tr><td class="time">{{ e.ts|localtime }}</td><td>{{ e.camera_name }}</td><td>{{ e.zone }}</td>
+<td><span class="badge {{ e.type }}">{{ e.type.replace('_',' ') }}</span></td><td>{{ e.person_name or '—' }}</td>
+<td>{% if e.snapshot_path %}<a href="/media/events/{{ e.id }}/snapshot" target="_blank">picture</a>{% endif %}</td></tr>
 {% else %}<tr><td colspan="6" class="muted">No events yet.</td></tr>{% endfor %}
 </table></div>
 {% endblock %}

@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Rule{% endblock %}
 {% block content %}
-<h1>{{ 'Edit' if rule.id else 'Add' }} rule</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/rules">Rules</a></div><h1>{{ rule.name if rule.id else 'Add rule' }}</h1></div>
+</div>
 <form method="post" action="/rules/save" class="card">
 {% include "_csrf.html" %}<input type="hidden" name="id" value="{{ rule.id or '' }}">
 <div class="row"><div><label>Name</label><input type="text" name="name" value="{{ rule.name }}" required></div>

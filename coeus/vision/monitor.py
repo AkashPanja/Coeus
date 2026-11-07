@@ -68,6 +68,8 @@ class CameraMonitor(threading.Thread):
         self.status = MonitorStatus()
         self._stop = threading.Event()
         self._latest_jpeg: bytes | None = None
+        self._latest_frame: np.ndarray | None = None
+        self._latest_frame_at = 0.0
         self._latest_lock = threading.Lock()
         self._last_motion_event = 0.0
         self._last_person_seen: dict[int | str, float] = {}
@@ -79,6 +81,11 @@ class CameraMonitor(threading.Thread):
     def latest_jpeg(self) -> bytes | None:
         with self._latest_lock:
             return self._latest_jpeg
+
+    def latest_frame(self) -> tuple[np.ndarray | None, float]:
+        """Most recent decoded frame and its time.monotonic() timestamp."""
+        with self._latest_lock:
+            return self._latest_frame, self._latest_frame_at
 
     # -- loop ------------------------------------------------------------------
     def run(self) -> None:
@@ -124,6 +131,8 @@ class CameraMonitor(threading.Thread):
             ok, frame = cap.retrieve()
             if not ok or frame is None:
                 continue
+            with self._latest_lock:
+                self._latest_frame, self._latest_frame_at = frame, time.monotonic()
             self.status.state = "online"
             self.status.frames += 1
             self.status.last_frame_at = time.time()

@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Camera{% endblock %}
 {% block content %}
-<h1>{{ 'Edit' if cam.id else 'Add' }} camera</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/cameras">Cameras</a></div><h1>{{ cam.name if cam.id else 'Add camera' }}</h1><div class="sub">Live stream, face recognition and YouTube archive for one camera.</div></div>
+</div>
 <form method="post" action="/cameras/save" class="card">
 {% include "_csrf.html" %}
 <input type="hidden" name="id" value="{{ cam.id or '' }}">
@@ -31,7 +33,8 @@
 <span id="stream_out" class="muted"></span></p>
 <img id="stream_preview" alt="" style="display:none;border-radius:6px;max-width:320px">
 <div class="row">
-  <div><label><input type="checkbox" name="monitor_enabled" {{ 'checked' if cam.monitor_enabled }}> Monitor this camera live</label></div>
+  <div><label><input type="checkbox" name="monitor_enabled" {{ 'checked' if cam.monitor_enabled }}> Watch this camera live</label>
+    <span class="hint">Only one camera is watched live at a time; ticking this moves live watching here.</span></div>
   <div><label>Detection FPS</label><input type="number" step="0.5" min="0.5" max="15" name="detect_fps" value="{{ cam.detect_fps }}"></div>
   <div><label>Motion event cooldown (s)</label><input type="number" min="0" name="cooldown_s" value="{{ cam.cooldown_s }}"></div>
   <div><label>Face recognition</label><select name="face_mode">
@@ -55,8 +58,8 @@
     <div class="flash error" style="margin:0">No YouTube account yet. <a href="/youtube/new?next={{ (request.url.path ~ ('?' ~ request.url.query if request.url.query else ''))|urlencode }}">Add one</a> (you'll come back here).</div>
     {% endif %}
   </div>
-  <div><label>Privacy</label><select name="yt_privacy">{% for p in ['private','unlisted','public'] %}<option {{ 'selected' if cam.yt_privacy == p }}>{{ p }}</option>{% endfor %}</select></div>
-  <div><label>Playlist ID <span class="hint">optional</span></label><input type="text" name="yt_playlist_id" value="{{ cam.yt_playlist_id or '' }}"></div>
+  <div><label>Privacy</label><p class="muted" style="margin:6px 0">Private, always</p></div>
+  <div><label>Playlist</label><p class="muted" style="margin:6px 0">{% if cam.yt_playlist_id %}<a href="https://www.youtube.com/playlist?list={{ cam.yt_playlist_id }}" target="_blank" rel="noopener">Open on YouTube</a>{% else %}A private playlist for this camera is created on the first upload{% endif %}</p></div>
 </div>
 <label>Title template <span class="hint">{camera} {date} {part} {parts} {start} {end}</span></label>
 <input type="text" name="yt_title_template" value="{{ cam.yt_title_template }}">

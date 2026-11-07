@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Add YouTube account{% endblock %}
 {% block content %}
-<h1>Add YouTube account</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/youtube">YouTube accounts</a></div><h1>Add YouTube account</h1></div>
+</div>
 <form method="post" action="/youtube/new" class="card">{% include "_csrf.html" %}
 <input type="hidden" name="next" value="{{ next }}">
 <div class="row">

@@ -1,8 +1,10 @@
 {% extends "base.html" %}{% block title %}Account{% endblock %}
 {% block content %}
-<h1>Account</h1>
+<div class="page-head">
+  <div><h1>Account</h1></div>
+</div>
 <form method="post" action="/users/password" class="card">{% include "_csrf.html" %}
-<h2 style="margin-top:0">Change your password</h2>
+<h2>Change your password</h2>
 <div class="row"><div><label>Current password</label><input type="password" name="current" required autocomplete="current-password"></div>
 <div><label>New password</label><input type="password" name="new" minlength="8" required autocomplete="new-password"></div></div>
 <p><button>Change password</button></p></form>

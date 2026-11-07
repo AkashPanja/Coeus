@@ -1,0 +1,114 @@
+{% extends "base.html" %}{% block title %}Gate{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Gate</h1>
+    <div class="sub">Recognise an allowed person on one camera and open the gate.</div></div>
+  <div class="actions">
+    {% if cfg.enabled %}<span class="badge ok">On · {{ cam.name if cam }}</span>{% else %}<span class="badge">Off</span>{% endif %}
+    <form method="post" action="/gate/check" class="inline">{% include "_csrf.html" %}<button class="secondary" {{ 'disabled' if not cfg.enabled }}>Run a check now</button></form>
+    <form method="post" action="/gate/test-open" class="inline" onsubmit="return confirm('This really runs the gate action. Continue?')">{% include "_csrf.html" %}<button class="secondary">Test the gate action</button></form>
+  </div>
+</div>
+
+<div class="split">
+<form method="post" action="/gate/save" class="card">{% include "_csrf.html" %}
+  <h2>Setup</h2>
+  <label for="g_enabled"><input type="checkbox" id="g_enabled" name="enabled" {{ 'checked' if cfg.enabled }}> Gate opening is on</label>
+  <div class="row">
+    <div><label for="g_cam">Camera</label>
+      <select id="g_cam" name="camera_id"><option value="">— choose —</option>
+      {% for c in cams %}<option value="{{ c.id }}" {{ 'selected' if c.id == cfg.camera_id }}>{{ c.name }}{{ ' · live' if c.monitor_enabled }}</option>{% endfor %}</select></div>
+    <div><label for="g_mode">When to check</label>
+      <select id="g_mode" name="mode">
+        {% for m, t in [('webhook','When the webhook is called'),('continuous','All the time (live)'),('both','Both')] %}<option value="{{ m }}" {{ 'selected' if cfg.mode == m }}>{{ t }}</option>{% endfor %}
+      </select></div>
+  </div>
+  <p class="hint">“All the time” uses the camera's live stream. This NAS watches only one camera live, so pick the gate camera there.</p>
+
+  <label>Who may open the gate <span class="hint">none ticked = everyone in People</span></label>
+  <div class="checks">{% for p in people %}<label><input type="checkbox" name="person_ids" value="{{ p.id }}" {{ 'checked' if p.id in cfg.person_ids }}>{{ p.name }}</label>{% else %}<span class="muted">No people yet. <a href="/persons">Add people</a> with face photos.</span>{% endfor %}</div>
+
+  <h2 style="margin-top:18px">Recognition</h2>
+  <div class="row">
+    <div><label for="g_method">Method</label>
+      <select id="g_method" name="method">
+        {% for m, t in [('local','On-device face match'),('llm','LLM: send the picture, get name and confidence'),('local+llm','On-device, ask the LLM if not recognised'),('both','On-device and LLM must agree (strictest)')] %}<option value="{{ m }}" {{ 'selected' if cfg.method == m }}>{{ t }}</option>{% endfor %}
+      </select></div>
+    <div><label for="g_img">Picture sent to the LLM</label>
+      <select id="g_img" name="llm_image"><option value="face" {{ 'selected' if cfg.llm_image == 'face' }}>Face close-up</option><option value="frame" {{ 'selected' if cfg.llm_image == 'frame' }}>Whole camera picture</option></select></div>
+    <div><label for="g_conf">Minimum LLM confidence</label><input type="number" id="g_conf" name="llm_min_confidence" step="0.01" min="0.3" max="0.99" value="{{ cfg.llm_min_confidence }}"></div>
+    <div><label for="g_calls">LLM calls per check, at most</label><input type="number" id="g_calls" name="max_llm_calls" min="0" max="10" value="{{ cfg.max_llm_calls }}"></div>
+  </div>
+  {% if not llm_ready %}<p class="hint">No LLM is set up yet. <a href="/settings#llm">Choose a provider</a> to use the LLM methods.</p>{% endif %}
+  <div class="row">
+    <div><label for="g_win">Watch for up to (seconds)</label><input type="number" id="g_win" name="window_s" min="2" max="60" step="1" value="{{ cfg.window_s|int }}"></div>
+    <div><label for="g_cool">Don't open again within (seconds)</label><input type="number" id="g_cool" name="cooldown_s" min="0" value="{{ cfg.cooldown_s }}"></div>
+  </div>
+
+  <h2 style="margin-top:18px">Opening the gate</h2>
+  <label for="g_action">Action <span class="hint">Home Assistant service, or a webhook. Variables: {person} {confidence} {time}</span></label>
+  <textarea id="g_action" name="action" rows="8">{{ action_json }}</textarea>
+  <p class="hint">Examples: <code>switch.turn_on</code> with <code>{"entity_id": "switch.main_gate"}</code>, <code>cover.open_cover</code> with <code>{"entity_id": "cover.gate"}</code>, or <code>{"type": "webhook", "url": "http://…/open"}</code>.</p>
+  <div class="form-foot"><button>Save</button></div>
+</form>
+
+<div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+  <div class="card">
+    <h2>Webhook</h2>
+    <p class="muted">Call this address (GET or POST) from a doorbell, a Home Assistant automation or n8n to start a check. It answers with the result as JSON. Add <code>?wait=false</code> to get an answer straight away.</p>
+    <div class="copy-field"><input type="text" id="hook" value="{{ hook }}" readonly aria-label="Webhook address">
+      <button type="button" class="secondary small" onclick="copyHook()">Copy</button></div>
+    <p class="hint" id="copied"></p>
+    <form method="post" action="/gate/token" onsubmit="return confirm('The current address will stop working. Continue?')">{% include "_csrf.html" %}<button class="small danger">Make a new address</button></form>
+    <details><summary>Home Assistant example</summary>
+<pre class="mono" style="white-space:pre-wrap;margin:0">rest_command:
+  coeus_gate_check:
+    url: "{{ hook }}"
+    method: post
+    timeout: 30</pre></details>
+  </div>
+
+  <div class="card">
+    <h2>Try a photo</h2>
+    <p class="muted">See who Coeus recognises in a picture. Nothing opens.</p>
+    <form id="tryform" onsubmit="tryPhoto(event)">
+      <input type="file" id="try_photo" name="photo" accept="image/*" required aria-label="Photo">
+      <label for="try_llm"><input type="checkbox" id="try_llm" name="use_llm" value="1" {{ 'checked' if llm_ready }} {{ 'disabled' if not llm_ready }}> Also ask the LLM</label>
+      <div class="form-foot"><button class="secondary">Recognise</button></div>
+    </form>
+    <div id="tryout" class="result" hidden></div>
+  </div>
+</div>
+</div>
+
+<div class="section-title"><h2>Recent checks</h2><span class="muted">last 30</span></div>
+<div class="table-wrap"><table>
+<tr><th>Picture</th><th>Time</th><th>Started by</th><th>Result</th><th>Person</th><th>Confidence</th><th>Detail</th></tr>
+{% for c in checks %}
+<tr><td>{% if c.snapshot_path %}<a href="/media/gate/{{ c.id }}" target="_blank"><img class="face" src="/media/gate/{{ c.id }}" loading="lazy" alt=""></a>{% endif %}</td>
+<td class="time">{{ c.ts|localtime }}</td><td>{{ c.trigger }}</td>
+<td><span class="badge {{ c.outcome }}">{{ outcome_text.get(c.outcome, c.outcome) }}</span>{% if c.action_ok == false %} <span class="badge failed">action failed</span>{% endif %}</td>
+<td>{{ c.person_name or '—' }}{% if c.source %} <span class="hint">{{ c.source }}</span>{% endif %}</td>
+<td class="num">{{ '%.2f'|format(c.confidence) if c.confidence else '—' }}</td>
+<td class="muted" style="max-width:340px">{{ c.detail }}{% if c.llm_calls %} · {{ c.llm_calls }} LLM call(s){% endif %} · {{ c.duration_ms }} ms</td></tr>
+{% else %}<tr><td colspan="7" class="muted">No checks yet. Save the setup, then press “Run a check now” or call the webhook.</td></tr>{% endfor %}
+</table></div>
+
+<script>
+const CSRF=document.querySelector('meta[name=csrf-token]').content;
+async function copyHook(){const el=document.getElementById('hook');
+  try{await navigator.clipboard.writeText(el.value);document.getElementById('copied').textContent='Copied.';}
+  catch(e){el.select();document.getElementById('copied').textContent='Press Ctrl+C to copy.';}}
+async function tryPhoto(ev){ev.preventDefault();
+  const out=document.getElementById('tryout'); out.hidden=false; out.textContent='Looking…';
+  const r=await fetch('/gate/try-photo',{method:'POST',body:new FormData(ev.target),headers:{'X-CSRF-Token':CSRF}});
+  const j=await r.json(); if(!j.ok){out.textContent=j.error;return;}
+  const esc=s=>String(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  let h='<div><b>Faces found:</b> '+(j.faces??0)+'</div>';
+  if(j.local) h+='<div><b>On-device:</b> '+(j.local.name?esc(j.local.name):'not recognised')+' <span class="muted">(similarity '+j.local.confidence+')</span></div>';
+  if(j.local_error) h+='<div class="muted">On-device: '+esc(j.local_error)+'</div>';
+  if(j.llm) h+='<div><b>LLM:</b> '+(j.llm.name?esc(j.llm.name):'unknown')+' <span class="muted">(confidence '+j.llm.confidence+')</span></div><div class="muted">'+esc(j.llm.reason)+'</div>';
+  if(j.llm_error) h+='<div class="muted">LLM: '+esc(j.llm_error)+'</div>';
+  out.innerHTML=h;}
+</script>
+{% endblock %}

@@ -1,6 +1,8 @@
 {% extends "base.html" %}{% block title %}Recordings folder{% endblock %}
 {% block content %}
-<h1>Recordings folder</h1>
+<div class="page-head">
+  <div><div class="crumbs"><a href="/recordings">Recordings</a></div><h1>Recordings folder</h1><div class="sub">Pick the folder that holds your Surveillance Station camera folders.</div></div>
+</div>
 {% if missing %}
 <div class="flash error">The mounted path <code>{{ mount }}</code> does not exist in the container. Add a volume in docker-compose.yml, for example <code>/volume1/surveillance:/recordings:ro</code>.</div>
 {% else %}

@@ -20,10 +20,14 @@ DESCRIBE_PROMPT = (
     "Do not speculate about identity."
 )
 IDENTIFY_PROMPT = (
-    "The first image is a face captured by a home security camera. The following images are "
-    "reference photos of known household members, each preceded by their name. Decide whether "
-    "the captured face is one of these people. Answer with JSON only: "
-    '{"name": "<exact name or unknown>", "confidence": <0..1>, "reason": "<short>"}'
+    "The first image comes from a home security camera: either a close crop of a face or the "
+    "whole camera picture. The following images are reference photos of known people, each "
+    "preceded by their name. Decide whether the person in the camera image is one of these "
+    "people. Use only the names given. If nobody is visible, the face is unclear, or it does "
+    "not match anyone, answer \"unknown\". Confidence is your probability (0 to 1) that the "
+    "named person is correct; be conservative, because this decides whether a gate opens. "
+    'Answer with JSON only: {"name": "<exact name or unknown>", "confidence": <0..1>, '
+    '"reason": "<one short sentence>"}'
 )
 IDENTIFY_SCHEMA = {
     "type": "object",

@@ -1,6 +1,9 @@
 {% extends "base.html" %}{% block title %}Recordings{% endblock %}
 {% block content %}
-<h1>Recordings</h1>
+<div class="page-head">
+  <div><h1>Recordings</h1><div class="sub">Each camera folder is merged daily and uploaded, private, to its own playlist.</div></div>
+  <div class="actions"><a class="btn secondary" href="/library">Change folder</a></div>
+</div>
 <p class="muted">Camera folders in <code>{{ root }}</code> · <a href="/library">change folder</a></p>
 {% if not folders %}
 <div class="card">No camera folders here. <a class="btn" href="/library">Choose the recordings folder</a></div>
